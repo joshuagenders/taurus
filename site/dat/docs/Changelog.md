@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.15.1<sup> 14 May 2020</sup>
+- update nunit runtime to dotnet core
+
 ## 1.14.2<sup> 12 Apr 2020</sup>
 - implement new apritif actions:
   - `assertEval` and `storeEval`

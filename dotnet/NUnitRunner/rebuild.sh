@@ -1,7 +1,6 @@
 #!/bin/bash -xe
 HERE=$(dirname $0)
 
-nuget restore "$HERE/NUnitRunner/packages.config" -SolutionDirectory "$HERE" -Verbosity detailed
-xbuild /target:clean "$HERE/NUnitRunner.sln"
-xbuild /p:Configuration=Release "$HERE/NUnitRunner.sln"
+dotnet restore
+dotnet build --runtime ubuntu.18.04-x64
 cp $HERE/NUnitRunner/bin/Release/* $HERE/../../bzt/resources/NUnitRunner/

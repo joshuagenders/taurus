@@ -25,17 +25,14 @@ class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
     def __init__(self):
         super(NUnitExecutor, self).__init__()
         self.runner_dir = os.path.join(RESOURCES_DIR, "NUnitRunner")
-        self.runner_executable = os.path.join(self.runner_dir, "NUnitRunner.exe")
-        self.mono = None
+        self.runner_executable = os.path.join(self.runner_dir, "NUnitRunner.dll")
+        self.dotnet = None
 
     def install_required_tools(self):
-        if is_windows():
-            return
-
-        self.mono = self._get_tool(Mono)
-        self.log.debug("Checking for Mono")
-        if not self.mono.check_if_installed():
-            self.mono.install()
+        self.dotnet = self._get_tool(DotNet)
+        self.log.debug("Checking for DotNet")
+        if not self.dotnet.check_if_installed():
+            self.dotnet.install()
 
     def prepare(self):
         super(NUnitExecutor, self).prepare()
@@ -48,10 +45,6 @@ class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
 
     def startup(self):
         cmdline = []
-        if not is_windows():
-            if self.mono.tool_path:
-                cmdline.append(self.mono.tool_path)
-
         cmdline += [self.runner_executable,
                     "--target", self.script,
                     "--report-file", self.report_file]
@@ -65,15 +58,13 @@ class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
             cmdline += ['--concurrency', str(int(load.concurrency))]
         if load.ramp_up:
             cmdline += ['--ramp_up', str(int(load.ramp_up))]
-        if not is_windows():
-            self.env.add_path({"MONO_PATH": self.runner_dir})
 
         self.process = self._execute(cmdline)
 
 
-class Mono(RequiredTool):
+class DotNet(RequiredTool):
     def __init__(self, **kwargs):
-        super(Mono, self).__init__(tool_path="mono", installable=False, **kwargs)
+        super(DotNet, self).__init__(tool_path="dotnet", installable=False, **kwargs)
 
     def check_if_installed(self):
         self.log.debug('Trying %s: %s', self.tool_name, self.tool_path)
