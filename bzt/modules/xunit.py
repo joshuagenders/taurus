@@ -21,21 +21,24 @@ from bzt.engine import HavingInstallableTools
 from bzt.utils import get_full_path, is_windows, RequiredTool, RESOURCES_DIR, CALL_PROBLEMS
 
 
-class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
+class XUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
     def __init__(self):
-        super(NUnitExecutor, self).__init__()
-        self.runner_dir = os.path.join(RESOURCES_DIR, "NUnitRunner")
-        self.runner_executable = os.path.join(self.runner_dir, "NUnitRunner.dll")
-        self.dotnet = None
+        super(XUnitExecutor, self).__init__()
+        self.runner_dir = os.path.join(RESOURCES_DIR, "XUnitRunner")
+        self.runner_executable = os.path.join(self.runner_dir, "XUnitRunner.exe")
+        self.dotnetcore = None
 
     def install_required_tools(self):
-        self.dotnet = self._get_tool(DotNet)
-        self.log.debug("Checking for DotNet")
-        if not self.dotnet.check_if_installed():
-            self.dotnet.install()
+        if is_windows():
+            return
+
+        self.dotnetcore = self._get_tool(DotNetCore)
+        self.log.debug("Checking for dotnetcore")
+        if not self.dotnetcore.check_if_installed():
+            self.dotnetcore.install()
 
     def prepare(self):
-        super(NUnitExecutor, self).prepare()
+        super(XUnitExecutor, self).prepare()
         self.script = get_full_path(self.get_script_path())
         if not self.script:
             raise TaurusConfigError("Script not passed to runner %s" % self)
@@ -45,6 +48,10 @@ class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
 
     def startup(self):
         cmdline = []
+        if not is_windows():
+            if self.dotnetcore.tool_path:
+                cmdline.append(self.dotnetcore.tool_path)
+
         cmdline += [self.runner_executable,
                     "--target", self.script,
                     "--report-file", self.report_file]
@@ -58,13 +65,15 @@ class NUnitExecutor(SubprocessedExecutor, HavingInstallableTools):
             cmdline += ['--concurrency', str(int(load.concurrency))]
         if load.ramp_up:
             cmdline += ['--ramp_up', str(int(load.ramp_up))]
+        if not is_windows(): # required?
+            self.env.add_path({"DOTNETCORE_PATH": self.runner_dir})
 
         self.process = self._execute(cmdline)
 
 
-class DotNet(RequiredTool):
+class DotNetCore(RequiredTool):
     def __init__(self, **kwargs):
-        super(DotNet, self).__init__(tool_path="dotnet", installable=False, **kwargs)
+        super(DotNetCore, self).__init__(tool_path="dotnetcore", installable=False, **kwargs)
 
     def check_if_installed(self):
         self.log.debug('Trying %s: %s', self.tool_name, self.tool_path)

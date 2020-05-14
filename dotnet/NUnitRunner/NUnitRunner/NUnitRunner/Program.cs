@@ -1,4 +1,4 @@
-﻿using Mono.Options;
+﻿using CommandLine;
 using NUnit.Engine;
 using NUnitRunner.Models;
 using NUnitRunner.Services;
@@ -7,10 +7,9 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
-
 namespace NUnitRunner
 {
-    public class NUnitRunner
+    class Program
     {
         public static void Main(string[] args)
         {
@@ -19,20 +18,41 @@ namespace NUnitRunner
 
         private static async Task MainAsync(string[] args)
         {
-            var options = new RunnerOptions();
+            await Parser.Default
+                .ParseArguments<RunnerOptions>(args)
+                .WithParsedAsync(async o =>
+                {
+                    if (o.TargetAssembly == null)
+                    {
+                        throw new Exception("Target test suite wasn't provided. Is your file actually NUnit test DLL?");
+                    }
 
-            try
-            {
-                options = OptionsParser.ParseOptions(args);
-            }
-            catch (OptionException e)
-            {
-                Console.WriteLine(e.Message);
-                Console.WriteLine("Try running with '--help' for more information.");
-                Environment.Exit(1);
-            }
+                    if (o.Concurrency <= 0)
+                    {
+                        o.Concurrency = 1;
+                    }
 
-            var engine = TestEngineActivator.CreateInstance(true);
+                    o.DurationLimit = o.Hold + o.RampUp;
+
+                    if (o.DurationLimit == 0 && o.Iterations == 0)
+                    {
+                        o.Iterations = 1;
+                    }
+
+                    Console.WriteLine($"Concurrent users: {o.Concurrency}");
+                    Console.WriteLine($"Iterations: {o.Iterations}");
+                    Console.WriteLine($"Ramp period: {o.RampUp}");
+                    Console.WriteLine($"Hold for: {o.Hold}");
+                    Console.WriteLine($"Report file: {o.ReportFile}");
+                    Console.WriteLine($"Target: {o.TargetAssembly}");
+
+                    await Execute(o);
+                });
+        }
+
+        private static async Task Execute(RunnerOptions options)
+        {
+            var engine = TestEngineActivator.CreateInstance();
             var package = new TestPackage(options.TargetAssembly);
 
             var reportItems = new ConcurrentQueue<ReportItem>();
