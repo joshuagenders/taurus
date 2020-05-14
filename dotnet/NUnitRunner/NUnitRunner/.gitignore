@@ -1,7 +1,6 @@
 # Autosave files
 *~
 
-
 # build
 [Oo]bj/
 [Bb]in/
@@ -39,3 +38,6 @@ Thumbs.db
 
 # dotCover
 *.dotCover
+
+# visual studio
+.vs
