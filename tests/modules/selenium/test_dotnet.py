@@ -23,7 +23,7 @@ class TestNUnitDotNetCoreExecutor(SeleniumTestCase):
     def test_startup(self):
         self.obj.execution.merge({
             "scenario": {
-                "script": RESOURCES_DIR + "selenium/nunit/assemblies/NUnitSuite.dll"
+                "script": RESOURCES_DIR + "selenium/nunit/assemblies/NUnitDotNetSuite.dll"
             }
         })
         self.obj.prepare()
