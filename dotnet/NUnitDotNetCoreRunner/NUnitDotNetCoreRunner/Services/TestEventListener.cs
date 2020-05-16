@@ -1,27 +1,24 @@
 ﻿using NUnit.Engine;
+using NUnitRunner.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Xml;
 
-namespace NUnitRunner.Models
+namespace NUnitRunner.Services
 {
     public class TestEventListener : ITestEventListener
     {
-        public ITestRunner Runner { get; }
         private readonly ConcurrentQueue<ReportItem> _reportItems;
         private readonly string _threadName;
 
         public TestEventListener(
-            ITestEngine engine,
-            TestPackage package,
             ConcurrentQueue<ReportItem> reportItems,
             string threadName
         )
         {
             _reportItems = reportItems;
-            Runner = engine.GetRunner(package);
             _threadName = threadName;
         }
 
@@ -39,7 +36,7 @@ namespace NUnitRunner.Models
                     ReportItem item = new ReportItem();
                     DateTime start = DateTime.Parse(node.Attributes["start-time"].Value);
                     item.StartTime = (start.ToUniversalTime().Ticks - 621355968000000000) / 10000000;
-                    item.Duration = Double.Parse(node.Attributes["duration"].Value,
+                    item.Duration = double.Parse(node.Attributes["duration"].Value,
                                                  NumberStyles.AllowDecimalPoint,
                                                  NumberFormatInfo.InvariantInfo);
                     item.TestCase = node.Attributes["methodname"].Value;
