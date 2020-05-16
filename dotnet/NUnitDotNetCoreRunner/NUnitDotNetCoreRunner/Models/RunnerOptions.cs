@@ -24,6 +24,7 @@ namespace NUnitRunner.Models
 
         [Option('a', "assembly", Required = true, HelpText = "assembly which will be used to load tests from")]
         public string TargetAssembly { get; set; }
+
         [Option('n', "testname", Required = true, HelpText = "test name to pass into the NUnit '<name>' TestFilter")]
         public string TestName { get; set; }
     }

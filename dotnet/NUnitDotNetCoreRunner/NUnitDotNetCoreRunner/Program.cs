@@ -21,19 +21,35 @@ namespace NUnitRunner
                 .ParseArguments<RunnerOptions>(args)
                 .WithParsedAsync(async o =>
                 {
-                    Console.WriteLine($"Concurrent users: {o.Concurrency}");
-                    Console.WriteLine($"Iterations: {o.Iterations}");
-                    Console.WriteLine($"Ramp period: {o.RampUpMinutes}");
-                    Console.WriteLine($"Hold for: {o.HoldMinutes}");
-                    Console.WriteLine($"Report file: {o.ReportFile}");
-                    Console.WriteLine($"Target: {o.TargetAssembly}");
+                    PrintConfig(o);
                     var reportItems = new ConcurrentQueue<ReportItem>();
                     var reportWriter = new ReportWriter(reportItems, o.ReportFile);
                     var threadControl = new ThreadControl(o.Throughput > 0);
-                    var nunitAdapter = new NUnitAdapter(o, threadControl, reportItems);
+                    var nunitAdapter = new NUnitAdapter(o.TargetAssembly, o.TestName, threadControl, reportItems);
                     var threadAllocator = new ThreadAllocator(reportWriter, threadControl, nunitAdapter);
                     await threadAllocator.Run(o.Concurrency, o.Throughput, o.RampUpMinutes, o.HoldMinutes, o.Iterations);
                 });
+        }
+
+        private static void PrintConfig(RunnerOptions o)
+        {
+            Console.WriteLine($"Report file: {o.ReportFile}");
+            Console.WriteLine($"Concurrent users: {o.Concurrency}");
+            if (o.Throughput > 0)
+            {
+                Console.WriteLine($"Test: {o.Throughput}");
+            }
+            if (o.Iterations > 0)
+            {
+                Console.WriteLine($"Iterations: {o.Iterations}");
+            }
+            if (o.RampUpMinutes > 0)
+            {
+                Console.WriteLine($"Ramp period: {o.RampUpMinutes}");
+            }
+            Console.WriteLine($"Hold for: {o.HoldMinutes}");
+            Console.WriteLine($"Target: {o.TargetAssembly}");
+            Console.WriteLine($"Test: {o.TestName ?? "<all>"}");
         }
     }
 }

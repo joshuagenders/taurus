@@ -24,7 +24,7 @@ namespace NUnitDotNetCoreRunner.Services
         }
     }
 
-    interface IThreadControl
+    public interface IThreadControl
     {
         Task RequestTaskExecution(CancellationToken ct);
         int ReleaseTaskExecution(int count = 1);

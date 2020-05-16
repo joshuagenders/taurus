@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace NUnitRunner.Models
+namespace NUnitDotNetCoreRunner.Models
 {
     public class ReportItem
     {

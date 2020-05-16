@@ -1,6 +1,5 @@
 ﻿using NUnit.Engine;
-using NUnitRunner.Models;
-using NUnitRunner.Services;
+using NUnitDotNetCoreRunner.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -10,24 +9,26 @@ namespace NUnitDotNetCoreRunner.Services
 {
     public class NUnitAdapter : INUnitAdapter
     {
-        private readonly RunnerOptions _options;
-        private readonly ThreadControl _threadControl;
+        private readonly IThreadControl _threadControl;
         private readonly ITestEngine _engine;
         private readonly TestPackage _package;
         private readonly ConcurrentQueue<ReportItem> _reportItems;
         private readonly TestFilter _filter;
 
-        public NUnitAdapter(RunnerOptions options, ThreadControl threadControl, ConcurrentQueue<ReportItem> reportItems)
+        public NUnitAdapter(
+            string targetAssembly, 
+            string testName, 
+            IThreadControl threadControl, 
+            ConcurrentQueue<ReportItem> reportItems)
         {
-            _options = options;
             _threadControl = threadControl;
             _engine = TestEngineActivator.CreateInstance();
-            _package = new TestPackage(_options.TargetAssembly);
+            _package = new TestPackage(targetAssembly);
             _reportItems = reportItems;
             
-            _filter = string.IsNullOrWhiteSpace(options.TestName)
+            _filter = string.IsNullOrWhiteSpace(testName)
                 ? TestFilter.Empty
-                : new TestFilter($"<filter><name>{options.TestName}</name></filter>");
+                : new TestFilter($"<filter><name>{testName}</name></filter>");
 
             var runner = _engine.GetRunner(_package);
             var testCount = runner.CountTestCases(_filter);
