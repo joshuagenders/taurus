@@ -7,20 +7,22 @@ using System.Threading.Tasks;
 
 namespace NUnitRunner.Services
 {
-    public class ReportWriter
+    public class ReportWriter : IReportWriter
     {
         private readonly ConcurrentQueue<ReportItem> _reportItems;
+        private readonly string _reportFile;
 
-        public ReportWriter(ConcurrentQueue<ReportItem> reportItems)
+        public ReportWriter(ConcurrentQueue<ReportItem> reportItems, string reportFile)
         {
             _reportItems = reportItems;
+            _reportFile = reportFile;
         }
 
         public bool TestsCompleted { get; set; }
 
-        public async Task StartWriting(string reportFile)
+        public async Task StartWriting()
         {
-            using (var streamWriter = new StreamWriter(reportFile))
+            using (var streamWriter = new StreamWriter(_reportFile))
             {
                 streamWriter.AutoFlush = true;
 
@@ -52,5 +54,11 @@ namespace NUnitRunner.Services
 
             return JsonConvert.SerializeObject(sample);
         }
+    }
+
+    public interface IReportWriter
+    {
+        Task StartWriting();
+        bool TestsCompleted { get; set; }
     }
 }

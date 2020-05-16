@@ -1,10 +1,9 @@
-﻿using System.Numerics;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace NUnitDotNetCoreRunner.Services
 {
-    class ThreadControl
+    public class ThreadControl : IThreadControl
     {
         private readonly SemaphoreSlim _taskExecution;
 
@@ -15,13 +14,19 @@ namespace NUnitDotNetCoreRunner.Services
             _enabled = enabled;
         }
 
-        internal int ReleaseTaskExecution(int count = 1) => _enabled
+        public int ReleaseTaskExecution(int count = 1) => _enabled
             ? _taskExecution.Release(count)
             : 0;
 
-        internal async Task RequestTaskExecution(CancellationToken ct)
+        public async Task RequestTaskExecution(CancellationToken ct)
         {
             if (_enabled) await _taskExecution.WaitAsync(ct);
         }
+    }
+
+    interface IThreadControl
+    {
+        Task RequestTaskExecution(CancellationToken ct);
+        int ReleaseTaskExecution(int count = 1);
     }
 }

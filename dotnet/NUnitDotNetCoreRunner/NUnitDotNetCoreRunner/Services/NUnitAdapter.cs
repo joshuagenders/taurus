@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace NUnitDotNetCoreRunner.Services
 {
-    class TestRunner
+    public class NUnitAdapter : INUnitAdapter
     {
         private readonly RunnerOptions _options;
         private readonly ThreadControl _threadControl;
@@ -16,7 +16,8 @@ namespace NUnitDotNetCoreRunner.Services
         private readonly TestPackage _package;
         private readonly ConcurrentQueue<ReportItem> _reportItems;
         private readonly TestFilter _filter;
-        public TestRunner(RunnerOptions options, ThreadControl threadControl, ConcurrentQueue<ReportItem> reportItems)
+
+        public NUnitAdapter(RunnerOptions options, ThreadControl threadControl, ConcurrentQueue<ReportItem> reportItems)
         {
             _options = options;
             _threadControl = threadControl;
@@ -46,5 +47,10 @@ namespace NUnitDotNetCoreRunner.Services
                 _threadControl.ReleaseTaskExecution();
             };
         }
+    }
+
+    public interface INUnitAdapter
+    {
+        Task RunTest(string threadName, CancellationToken ct);
     }
 }

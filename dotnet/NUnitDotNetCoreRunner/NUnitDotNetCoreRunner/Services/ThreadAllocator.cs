@@ -8,52 +8,55 @@ using System.Threading.Tasks;
 
 namespace NUnitDotNetCoreRunner.Services
 {
-    class ThreadAllocator
+    public class ThreadAllocator : IThreadAllocator
     {
-        private readonly TestRunner _runner;
-        private readonly ReportWriter _reportWriter;
-        private readonly RunnerOptions _options;
-        private readonly ThreadControl _threadControl;
-        private readonly ConcurrentQueue<ReportItem> _reportItems;
+        private readonly INUnitAdapter _nunit;
+        private readonly IReportWriter _reportWriter;
+        private readonly IThreadControl _threadControl;
         private readonly CancellationTokenSource _cts;
         private readonly List<Task> _tasks;
         private DateTime _startTime { get; set; } = DateTime.UtcNow;
 
-        public ThreadAllocator(RunnerOptions options)
+        public ThreadAllocator(
+            IReportWriter reportWriter, 
+            IThreadControl threadControl, 
+            INUnitAdapter nUnitAdapter)
         {
-            _options = options;
-            _threadControl = new ThreadControl(options.Throughput > 0);
-            _reportItems = new ConcurrentQueue<ReportItem>();
-            _runner = new TestRunner(options, _threadControl, _reportItems);
-            _reportWriter = new ReportWriter(_reportItems);
+            _reportWriter = reportWriter;
+            _threadControl = threadControl;
+            _nunit = nUnitAdapter;
             _cts = new CancellationTokenSource();
             _tasks = new List<Task>();
         }
 
-        public async Task Run()
+        public async Task Run(
+            int concurrency,
+            double throughput,
+            int rampUpMinutes,
+            int holdMinutes,
+            int iterations)
         {
-            _cts.CancelAfter(TestDuration);
+            _cts.CancelAfter(TestDuration(rampUpMinutes, holdMinutes));
             _startTime = DateTime.UtcNow;
 
-            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(_options.ReportFile), _cts.Token);
+            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _cts.Token);
             var tasks = new Task[]
             {
-                Task.Run(() => StartThreads(), _cts.Token),
-                Task.Run(() => ReleaseTaskExecutions(), _cts.Token)
+                Task.Run(() => StartThreads(concurrency, rampUpMinutes), _cts.Token),
+                Task.Run(() => ReleaseTaskExecutions(throughput, iterations, rampUpMinutes, holdMinutes), _cts.Token)
             };
             await Task.WhenAll(tasks);
             await Task.WhenAll(_tasks);
             _reportWriter.TestsCompleted = true;
             await reportWriterTask;
-        }
+        } 
 
-        private async Task StartThreads()
+        private async Task StartThreads(int concurrency, int rampUpMinutes)
         {
-            var threadsRemaining = _options.Concurrency;
-            while (InRampup)
+            var threadsRemaining = concurrency;
+            while (InRampup(concurrency, rampUpMinutes))
             {
-                //todo go through and change rampup to seconds/minutes consistently
-                var sleepInterval = TimeSpan.FromSeconds(_options.RampUp / _options.Concurrency);
+                var sleepInterval = TimeSpan.FromSeconds(rampUpMinutes * 60 / concurrency);
                 StartThread();
                 threadsRemaining--;
                 await Task.Delay(sleepInterval, _cts.Token);
@@ -62,11 +65,11 @@ namespace NUnitDotNetCoreRunner.Services
         }
 
         private void StartThread() =>
-            _tasks.Add(Task.Run(() => _runner.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _cts.Token)));
+            _tasks.Add(Task.Run(() => _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _cts.Token)));
 
-        private async Task ReleaseTaskExecutions()
+        private async Task ReleaseTaskExecutions(double throughput, int iterations, int rampUpMinutes, int holdMinutes)
         {
-            if (_options.Throughput <= 0)
+            if (throughput <= 0)
             {
                 return;
             }
@@ -75,30 +78,30 @@ namespace NUnitDotNetCoreRunner.Services
             int tokensPerInterval;
             var partialTokens = 0d;
             var partialTokensPerInterval = 0d;
-            if (_options.Throughput > 1)
+            if (throughput > 1)
             {
-                sleepInterval = TimeSpan.FromSeconds(1 / _options.Throughput);
+                sleepInterval = TimeSpan.FromSeconds(1 / throughput);
                 tokensPerInterval = 1;
             }
             else
             {
                 sleepInterval = TimeSpan.FromSeconds(1);
-                tokensPerInterval = (int)_options.Throughput;
-                partialTokensPerInterval = Math.Truncate(_options.Throughput);
+                tokensPerInterval = (int)throughput;
+                partialTokensPerInterval = Math.Truncate(throughput);
             }
 
             int tokenTotal = 0;
-            while (!IsTestComplete(tokenTotal) && !_cts.Token.IsCancellationRequested)
+            while (!IsTestComplete(tokenTotal, iterations, rampUpMinutes, holdMinutes) && !_cts.Token.IsCancellationRequested)
             {
-                var accumulatedTokens = tokensPerInterval * PercentageThroughRampUp
-                    + partialTokensPerInterval * PercentageThroughRampUp 
+                var accumulatedTokens = tokensPerInterval * PercentageThroughRampUp(rampUpMinutes)
+                    + partialTokensPerInterval * PercentageThroughRampUp(rampUpMinutes)
                     + partialTokens;
 
                 partialTokens = Math.Truncate(accumulatedTokens);
                 
-                if (_options.Iterations > 0 && tokenTotal + (int)accumulatedTokens > _options.Iterations)
+                if (iterations > 0 && tokenTotal + (int)accumulatedTokens > iterations)
                 {
-                    accumulatedTokens = _options.Iterations - tokenTotal;
+                    accumulatedTokens = iterations - tokenTotal;
                 }
 
                 if (int.MaxValue - accumulatedTokens < tokenTotal)
@@ -111,17 +114,25 @@ namespace NUnitDotNetCoreRunner.Services
             }
         }
 
-        private bool InRampup => 
-            _options.Concurrency > 1 && _startTime.AddMinutes(_options.RampUp) < DateTime.UtcNow;
+        private bool InRampup(int concurrency, int rampUpMinutes) => 
+            concurrency > 1 && _startTime.AddMinutes(rampUpMinutes) < DateTime.UtcNow;
         private double SecondsFromStart => _startTime.Subtract(DateTime.UtcNow).TotalSeconds;
-        private double PercentageThroughRampUp => SecondsFromStart / TimeSpan.FromMinutes(_options.RampUp).TotalSeconds;
+        private double PercentageThroughRampUp(int rampUpMinutes) => 
+            SecondsFromStart / TimeSpan.FromMinutes(rampUpMinutes).TotalSeconds;
 
-        private TimeSpan TestDuration => TimeSpan.FromMinutes(_options.RampUp + _options.Hold);
+        private TimeSpan TestDuration (int rampUpMinutes, int holdMinutes) => 
+            TimeSpan.FromMinutes(rampUpMinutes + holdMinutes);
 
-        private bool IsTestComplete(int iterations) =>
-            (_options.Iterations > 0 && iterations >= _options.Iterations)
-            || DateTime.UtcNow > _endTime;
+        private bool IsTestComplete(int iterations, int configuredIterations, int rampUpMinutes, int holdMinutes) =>
+            (configuredIterations > 0 && iterations >= configuredIterations)
+            || DateTime.UtcNow > _endTime(rampUpMinutes, holdMinutes);
 
-        private DateTime _endTime => _startTime.AddMinutes(_options.RampUp + _options.Hold);
+        private DateTime _endTime (int rampUpMinutes, int holdMinutes) => 
+            _startTime.AddMinutes(rampUpMinutes + holdMinutes);
+    }
+
+    public interface IThreadAllocator
+    {
+        Task Run();
     }
 }
