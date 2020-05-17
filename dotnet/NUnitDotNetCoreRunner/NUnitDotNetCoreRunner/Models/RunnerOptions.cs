@@ -10,8 +10,8 @@ namespace NUnitDotNetCoreRunner.Models
         [Option('i', "iterations", Required = false, HelpText = "number of iterations over test suite to make")]
         public int Iterations { get; set; }
 
-        [Option('d', "hold-for", Required = false, HelpText = "the number of minutes to hold execution for")]
-        public int HoldMinutes { get; set; }
+        [Option('d', "hold-for", Required = true, HelpText = "the number of minutes to hold execution for")]
+        public int HoldForMinutes { get; set; }
 
         [Option('c', "concurrency", Required = false, HelpText = "number of concurrent users (threads allocated)", Default = 1)]
         public int Concurrency { get; set; }

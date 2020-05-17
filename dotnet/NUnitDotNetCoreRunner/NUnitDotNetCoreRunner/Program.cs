@@ -23,10 +23,10 @@ namespace NUnitRunner
                     PrintConfig(o);
                     var reportItems = new ConcurrentQueue<ReportItem>();
                     var reportWriter = new ReportWriter(reportItems, o.ReportFile);
-                    var threadControl = new ThreadControl(o.Throughput > 0);
+                    var threadControl = new ThreadControl(o.Throughput, o.Iterations);
                     var nunitAdapter = new NUnitAdapter(o.TargetAssembly, o.TestName, threadControl, reportItems);
                     var threadAllocator = new ThreadAllocator(reportWriter, threadControl, nunitAdapter);
-                    await threadAllocator.Run(o.Concurrency, o.Throughput, o.RampUpMinutes, o.HoldMinutes, o.Iterations);
+                    await threadAllocator.Run(o.Concurrency, o.Throughput, o.RampUpMinutes * 60, o.HoldForMinutes * 60, o.Iterations);
                 });
         }
 
@@ -46,7 +46,7 @@ namespace NUnitRunner
             {
                 Console.WriteLine($"Ramp period: {o.RampUpMinutes}");
             }
-            Console.WriteLine($"Hold for: {o.HoldMinutes}");
+            Console.WriteLine($"Hold for: {o.HoldForMinutes}");
             Console.WriteLine($"Target: {o.TargetAssembly}");
             Console.WriteLine($"Test: {o.TestName ?? "<all>"}");
         }

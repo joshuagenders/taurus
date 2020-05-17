@@ -1,4 +1,3 @@
-using AutoFixture.Xunit2;
 using Moq;
 using NUnitDotNetCoreRunner.Services;
 using System;
@@ -11,20 +10,29 @@ namespace NUnitDotNetCoreRunnerTests
     public class ThreadAllocatorTests
     {
         [Theory]
-        [InlineAutoMoqData(1, 0, 0, 0, 1)]
+        [InlineAutoMoqData(1, 0, 0, 3, 1)]
+        [InlineAutoMoqData(2, 0, 0, 3, 2)]
+        [InlineAutoMoqData(3, 0, 0, 3, 1)]
+        [InlineAutoMoqData(1, 0, 0, 3, 2)]
+
         public async Task WhenThreadAllocatorExecutes(
             int concurrency, 
             double throughput, 
-            int rampUpMinutes, 
-            int holdForMinutes, 
+            int rampUpSeconds, 
+            int holdForSeconds, 
             int iterations,
             ThreadControl threadControl,
             Mock<IReportWriter> reportWriter,
-            Mock<INUnitAdapter> nUnitAdapter)
+            Mock<INUnitAdapter> nUnitAdapter,
+            CancellationTokenSource cts)
         {
             var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
-            await threadAllocator.Run(concurrency, throughput, rampUpMinutes, holdForMinutes, iterations);
-            nUnitAdapter.Verify(n => n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()), Times.Exactly(iterations));
+            cts.CancelAfter(TimeSpan.FromMilliseconds(500));
+ 
+            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, iterations);
+            nUnitAdapter.Verify(n => 
+                n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()), 
+                Times.Exactly(iterations));
             /*
              * todo test cases
              when tasks are cancelled
