@@ -16,6 +16,8 @@ namespace NUnitRunner
 
         private static async Task MainAsync(string[] args)
         {
+            //todo requests scenario support -> input config file as yaml/json
+            //todo add runic/cucumber support + publish to nuget
             await Parser.Default
                 .ParseArguments<RunnerOptions>(args)
                 .WithParsedAsync(async o =>

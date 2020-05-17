@@ -51,7 +51,7 @@ namespace NUnitDotNetCoreRunner.Services
                 };
                 if (throughput > 0)
                 {
-                    tasks.Add(Task.Run(() => ReleaseTaskExecutions(), _testCts.Token));
+                    tasks.Add(Task.Run(() => _threadControl.ReleaseTokens(_testCts.Token), _testCts.Token));
                 }
 
                 await Task.WhenAll(tasks);
@@ -113,28 +113,6 @@ namespace NUnitDotNetCoreRunner.Services
                     _threadControl.ReleaseTaskExecution();
                 }
             };
-        }
-
-        private async Task ReleaseTaskExecutions()
-        {
-            var tokens = 0d;
-            while (!_threadControl.IsTestComplete() && !_testCts.Token.IsCancellationRequested)
-            {
-                System.Diagnostics.Debug.WriteLine("ReleaseTaskExecution Iteration Start");
-
-                tokens += _threadControl.RequestTokens();
-                var tokensToRelease = (int)Math.Floor(tokens);
-                tokens = Math.Truncate(tokens);
-                if (tokensToRelease > 0)
-                {
-                    _threadControl.ReleaseTaskExecution(tokensToRelease);
-
-                    System.Diagnostics.Debug.WriteLine($"Tokens to release: {tokensToRelease}");
-                }
-                await Task.Delay(TimeSpan.FromSeconds(1), _testCts.Token);
-
-                System.Diagnostics.Debug.WriteLine("ReleaseTaskExecution Iteration End");
-            }
         }
 
         private bool InRampup(int concurrency, int rampUpSeconds) => 

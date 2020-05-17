@@ -40,6 +40,7 @@ namespace NUnitDotNetCoreRunner.Services
         public async Task RequestTaskExecution(CancellationToken ct)
         {
             if (_enabled) await _taskExecution.WaitAsync(ct);
+            //todo locking
             var actualIterations = Interlocked.Increment(ref _actualIterations);
             if (actualIterations > _iterations)
             {
@@ -47,25 +48,35 @@ namespace NUnitDotNetCoreRunner.Services
             }
         }
 
-        public double RequestTokens()
+        public async Task ReleaseTokens(CancellationToken ct)
         {
-            if (_lastTokenRequest == null)
+            var accumulatedTokens = 0d;
+            var total = 0;
+            while (!IsTestComplete() && !ct.IsCancellationRequested)
             {
-                _lastTokenRequest = DateTime.UtcNow;
-                return 0;
+                accumulatedTokens += _throughput * PercentageThroughRampUp;
+                var tokensToRelease = (int)accumulatedTokens;
+                if (_iterations > 0)
+                {
+                    if (tokensToRelease + total > _iterations)
+                    {
+                        tokensToRelease = _iterations - total;
+                    }
+                    if (int.MaxValue - tokensToRelease < total)
+                    {
+                        total += (int)accumulatedTokens;
+                    }
+                    else
+                    {
+                        total = int.MaxValue;
+                    }
+                }
+                accumulatedTokens = Math.Truncate(accumulatedTokens);
+                _taskExecution.Release(tokensToRelease);
+                await Task.Delay(TimeSpan.FromSeconds(1));
             }
-
-            var now = DateTime.UtcNow;
-            var timePassed = now.Subtract(_lastTokenRequest);
-            var tokens = _throughput * timePassed.TotalSeconds * PercentageThroughRampUp;
-
-            if (_actualIterations + tokens > _iterations)
-            {
-                tokens = _iterations - _actualIterations;
-            }
-            return tokens;
         }
-
+ 
         private double SecondsFromStart => _startTime.Subtract(DateTime.UtcNow).TotalSeconds;
 
         private double PercentageThroughRampUp => SecondsFromStart > _rampUpSeconds
@@ -85,6 +96,6 @@ namespace NUnitDotNetCoreRunner.Services
         Task RequestTaskExecution(CancellationToken ct);
         int ReleaseTaskExecution(int count = 1);
         bool IsTestComplete();
-        public double RequestTokens();
+        Task ReleaseTokens(CancellationToken ct);
     }
 }
