@@ -1,11 +1,11 @@
 ﻿using Newtonsoft.Json;
-using NUnitRunner.Models;
+using NUnitDotNetCoreRunner.Models;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace NUnitRunner.Services
+namespace NUnitDotNetCoreRunner.Services
 {
     public class ReportWriter : IReportWriter
     {

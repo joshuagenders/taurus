@@ -1,7 +1,6 @@
 ﻿using CommandLine;
+using NUnitDotNetCoreRunner.Models;
 using NUnitDotNetCoreRunner.Services;
-using NUnitRunner.Models;
-using NUnitRunner.Services;
 using System;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;

@@ -43,9 +43,15 @@ namespace NUnitDotNetCoreRunner.Services
             while (!ct.IsCancellationRequested)
             {
                 await _threadControl.RequestTaskExecution(ct);
-                var runner = _engine.GetRunner(_package);
-                runner.Run(new TestEventListener(_reportItems, threadName), _filter);
-                _threadControl.ReleaseTaskExecution();
+                try
+                {
+                    var runner = _engine.GetRunner(_package);
+                    runner.Run(new TestEventListener(_reportItems, threadName), _filter);
+                }
+                finally
+                {
+                    _threadControl.ReleaseTaskExecution();
+                }
             };
         }
     }

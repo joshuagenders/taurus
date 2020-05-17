@@ -1,8 +1,6 @@
-﻿using NUnitRunner.Models;
-using NUnitRunner.Services;
-using System;
-using System.Collections.Concurrent;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,7 +11,8 @@ namespace NUnitDotNetCoreRunner.Services
         private readonly INUnitAdapter _nunit;
         private readonly IReportWriter _reportWriter;
         private readonly IThreadControl _threadControl;
-        private readonly CancellationTokenSource _cts;
+        private readonly CancellationTokenSource _testCts;
+        private readonly CancellationTokenSource _reportWriterCts;
         private readonly List<Task> _tasks;
         private DateTime _startTime { get; set; } = DateTime.UtcNow;
 
@@ -25,7 +24,8 @@ namespace NUnitDotNetCoreRunner.Services
             _reportWriter = reportWriter;
             _threadControl = threadControl;
             _nunit = nUnitAdapter;
-            _cts = new CancellationTokenSource();
+            _testCts = new CancellationTokenSource();
+            _reportWriterCts = new CancellationTokenSource();
             _tasks = new List<Task>();
         }
 
@@ -36,19 +36,28 @@ namespace NUnitDotNetCoreRunner.Services
             int holdMinutes,
             int iterations)
         {
-            _cts.CancelAfter(TestDuration(rampUpMinutes, holdMinutes));
+            if (iterations <= 0) 
+            {
+                _testCts.CancelAfter(TestDuration(rampUpMinutes, holdMinutes));
+            }
             _startTime = DateTime.UtcNow;
 
-            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _cts.Token);
-            var tasks = new Task[]
+            try
             {
-                Task.Run(() => StartThreads(concurrency, rampUpMinutes), _cts.Token),
-                Task.Run(() => ReleaseTaskExecutions(throughput, iterations, rampUpMinutes, holdMinutes), _cts.Token)
-            };
-            await Task.WhenAll(tasks);
-            await Task.WhenAll(_tasks);
-            _reportWriter.TestsCompleted = true;
-            await reportWriterTask;
+                var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _reportWriterCts.Token);
+                var tasks = new Task[]
+                {
+                Task.Run(() => StartThreads(concurrency, rampUpMinutes), _testCts.Token),
+                Task.Run(() => ReleaseTaskExecutions(throughput, iterations, rampUpMinutes, holdMinutes), _testCts.Token)
+                };
+                await Task.WhenAll(tasks);
+                await Task.WhenAll(_tasks);
+                _reportWriter.TestsCompleted = true;
+                _reportWriterCts.CancelAfter(TimeSpan.FromSeconds(30));
+                await reportWriterTask;
+            }
+            catch (TaskCanceledException){ }
+            catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException)){ }
         } 
 
         private async Task StartThreads(int concurrency, int rampUpMinutes)
@@ -59,13 +68,13 @@ namespace NUnitDotNetCoreRunner.Services
                 var sleepInterval = TimeSpan.FromSeconds(rampUpMinutes * 60 / concurrency);
                 StartThread();
                 threadsRemaining--;
-                await Task.Delay(sleepInterval, _cts.Token);
+                await Task.Delay(sleepInterval, _testCts.Token);
             }
             Parallel.For(0, threadsRemaining, _ => StartThread());
         }
 
         private void StartThread() =>
-            _tasks.Add(Task.Run(() => _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _cts.Token)));
+            _tasks.Add(Task.Run(() => _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _testCts.Token)));
 
         private async Task ReleaseTaskExecutions(double throughput, int iterations, int rampUpMinutes, int holdMinutes)
         {
@@ -91,7 +100,8 @@ namespace NUnitDotNetCoreRunner.Services
             }
 
             int tokenTotal = 0;
-            while (!IsTestComplete(tokenTotal, iterations, rampUpMinutes, holdMinutes) && !_cts.Token.IsCancellationRequested)
+            while (!IsTestComplete(tokenTotal, iterations, rampUpMinutes, holdMinutes) 
+                && !_testCts.Token.IsCancellationRequested)
             {
                 var accumulatedTokens = tokensPerInterval * PercentageThroughRampUp(rampUpMinutes)
                     + partialTokensPerInterval * PercentageThroughRampUp(rampUpMinutes)
@@ -110,7 +120,7 @@ namespace NUnitDotNetCoreRunner.Services
                 }
 
                 _threadControl.ReleaseTaskExecution((int)accumulatedTokens);
-                await Task.Delay(sleepInterval, _cts.Token);
+                await Task.Delay(sleepInterval, _testCts.Token);
             }
         }
 
@@ -133,6 +143,11 @@ namespace NUnitDotNetCoreRunner.Services
 
     public interface IThreadAllocator
     {
-        Task Run();
+        Task Run(
+            int concurrency,
+            double throughput,
+            int rampUpMinutes,
+            int holdMinutes,
+            int iterations);
     }
 }

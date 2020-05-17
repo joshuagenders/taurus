@@ -1,12 +1,12 @@
 ﻿using NUnit.Engine;
-using NUnitRunner.Models;
+using NUnitDotNetCoreRunner.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Xml;
 
-namespace NUnitRunner.Services
+namespace NUnitDotNetCoreRunner.Services
 {
     public class TestEventListener : ITestEventListener
     {

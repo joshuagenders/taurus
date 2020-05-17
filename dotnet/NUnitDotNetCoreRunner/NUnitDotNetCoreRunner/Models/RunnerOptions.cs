@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 
-namespace NUnitRunner.Models
+namespace NUnitDotNetCoreRunner.Models
 {
     public class RunnerOptions
     {
