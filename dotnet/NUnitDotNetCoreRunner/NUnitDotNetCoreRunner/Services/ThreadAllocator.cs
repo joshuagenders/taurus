@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NUnitDotNetCoreRunner.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -35,8 +36,7 @@ namespace NUnitDotNetCoreRunner.Services
             int concurrency,
             double throughput,
             int rampUpSeconds,
-            int holdForSeconds,
-            int iterations)
+            int holdForSeconds)
         {
             await _executionSemaphore.WaitAsync();
             _testCts.CancelAfter(TestDuration(rampUpSeconds, holdForSeconds));
@@ -45,11 +45,15 @@ namespace NUnitDotNetCoreRunner.Services
             try
             {
                 var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _reportWriterCts.Token);
-                var tasks = new Task[]
+                var tasks = new List<Task>
                 {
-                Task.Run(() => StartThreads(concurrency, rampUpSeconds, _testCts.Token), _testCts.Token),
-                Task.Run(() => ReleaseTaskExecutions(throughput, iterations, rampUpSeconds, holdForSeconds), _testCts.Token)
+                    Task.Run(() => StartThreads(concurrency, rampUpSeconds, _testCts.Token), _testCts.Token)
                 };
+                if (throughput > 0)
+                {
+                    tasks.Add(Task.Run(() => ReleaseTaskExecutions(), _testCts.Token));
+                }
+
                 await Task.WhenAll(tasks);
                 await Task.WhenAll(_tasks);
                 _reportWriter.TestsCompleted = true;
@@ -58,6 +62,7 @@ namespace NUnitDotNetCoreRunner.Services
             }
             catch (TaskCanceledException) { }
             catch (OperationCanceledException) { }
+            catch (IterationsExceededException) { }
             catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
             finally
             {
@@ -81,7 +86,7 @@ namespace NUnitDotNetCoreRunner.Services
             }
             for (var i = 0; i < threadsRemaining; i++)
             {
-                _tasks.Add(Task.Run(() => _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _testCts.Token)));
+                _tasks.Add(Task.Run(() => StartTestLoop(), _testCts.Token));
             }
         }
 
@@ -89,13 +94,19 @@ namespace NUnitDotNetCoreRunner.Services
         {
             while (!_testCts.IsCancellationRequested)
             {
-                await _threadControl.RequestTaskExecution(_testCts.Token);
                 try
                 {
+                    await _threadControl.RequestTaskExecution(_testCts.Token);
                     if (!_testCts.IsCancellationRequested)
                     {
+                        System.Diagnostics.Debug.WriteLine($"Running test");
                         await _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _testCts.Token);
+                        System.Diagnostics.Debug.WriteLine($"Finished running test");
                     }
+                }
+                catch (IterationsExceededException)
+                {
+                    break;
                 }
                 finally
                 {
@@ -104,29 +115,25 @@ namespace NUnitDotNetCoreRunner.Services
             };
         }
 
-        private async Task ReleaseTaskExecutions(double throughput, int iterations, int rampUpSeconds, int holdForSeconds)
+        private async Task ReleaseTaskExecutions()
         {
-            if (throughput <= 0)
-            {
-                return;
-            }
-
-            var tokenTotal = 0;
             var tokens = 0d;
-            while (!IsTestComplete(tokenTotal, iterations, rampUpSeconds, holdForSeconds)
-                && !_testCts.Token.IsCancellationRequested)
+            while (!_threadControl.IsTestComplete() && !_testCts.Token.IsCancellationRequested)
             {
-                tokens += throughput * PercentageThroughRampUp(rampUpSeconds);
-                var tokensToRelease = (int)tokens;
-                tokens = Math.Truncate(tokens);
-                if (tokenTotal + tokensToRelease > iterations)
-                {
-                    tokensToRelease = iterations - tokenTotal;
-                }
-                tokenTotal += tokensToRelease;
+                System.Diagnostics.Debug.WriteLine("ReleaseTaskExecution Iteration Start");
 
-                _threadControl.ReleaseTaskExecution(tokensToRelease);
+                tokens += _threadControl.RequestTokens();
+                var tokensToRelease = (int)Math.Floor(tokens);
+                tokens = Math.Truncate(tokens);
+                if (tokensToRelease > 0)
+                {
+                    _threadControl.ReleaseTaskExecution(tokensToRelease);
+
+                    System.Diagnostics.Debug.WriteLine($"Tokens to release: {tokensToRelease}");
+                }
                 await Task.Delay(TimeSpan.FromSeconds(1), _testCts.Token);
+
+                System.Diagnostics.Debug.WriteLine("ReleaseTaskExecution Iteration End");
             }
         }
 
@@ -135,20 +142,8 @@ namespace NUnitDotNetCoreRunner.Services
             && rampUpSeconds > 1 
             && _startTime.AddSeconds(rampUpSeconds) < DateTime.UtcNow;
 
-        private double SecondsFromStart => _startTime.Subtract(DateTime.UtcNow).TotalSeconds;
-
-        private double PercentageThroughRampUp(int rampUpSeconds) => 
-            SecondsFromStart / rampUpSeconds;
-
         private TimeSpan TestDuration (int rampUpSeconds, int holdForSeconds) => 
             TimeSpan.FromSeconds(rampUpSeconds + holdForSeconds);
-
-        private bool IsTestComplete(int iterations, int configuredIterations, int rampUpSeconds, int holdForSeconds) =>
-            (configuredIterations > 0 && iterations >= configuredIterations)
-            || DateTime.UtcNow > EndTime(rampUpSeconds, holdForSeconds);
-
-        private DateTime EndTime (int rampUpSeconds, int holdForSeconds) => 
-            _startTime.AddSeconds(rampUpSeconds + holdForSeconds);
     }
 
     public interface IThreadAllocator
@@ -157,7 +152,6 @@ namespace NUnitDotNetCoreRunner.Services
             int concurrency,
             double throughput,
             int rampUpSeconds,
-            int holdForSecons,
-            int iterations);
+            int holdForSeconds);
     }
 }

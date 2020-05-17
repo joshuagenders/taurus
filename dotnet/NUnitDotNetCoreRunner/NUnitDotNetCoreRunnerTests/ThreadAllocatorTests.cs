@@ -12,26 +12,26 @@ namespace NUnitDotNetCoreRunnerTests
         [Theory]
         [InlineAutoMoqData(1, 0, 0, 3, 1)]
         [InlineAutoMoqData(2, 0, 0, 3, 2)]
+        [InlineAutoMoqData(4, 0, 0, 5, 20)]
         [InlineAutoMoqData(3, 0, 0, 3, 1)]
         [InlineAutoMoqData(1, 0, 0, 3, 2)]
 
         public async Task WhenThreadAllocatorExecutes(
-            int concurrency, 
-            double throughput, 
-            int rampUpSeconds, 
-            int holdForSeconds, 
+            int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds,
             int iterations,
-            ThreadControl threadControl,
             Mock<IReportWriter> reportWriter,
-            Mock<INUnitAdapter> nUnitAdapter,
-            CancellationTokenSource cts)
+            Mock<INUnitAdapter> nUnitAdapter)
         {
+            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
             var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
-            cts.CancelAfter(TimeSpan.FromMilliseconds(500));
- 
-            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, iterations);
-            nUnitAdapter.Verify(n => 
-                n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()), 
+            //cts.CancelAfter(TimeSpan.FromSeconds(2));
+
+            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
+            nUnitAdapter.Verify(n =>
+                n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()),
                 Times.Exactly(iterations));
             /*
              * todo test cases
@@ -58,6 +58,27 @@ namespace NUnitDotNetCoreRunnerTests
                 then iterations are not exceeded
             test duration is not exceeded
              */
+        }
+
+        [Theory]
+        [InlineAutoMoqData(1, 0, 0, 2, 10, 10)]
+        public async Task WhenThreadAllocatorExecutes2(
+                  int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds,
+            int iterations,
+            int expectedCalls,
+            Mock<IReportWriter> reportWriter,
+            Mock<INUnitAdapter> nUnitAdapter)
+        {
+            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
+            var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
+
+            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
+            nUnitAdapter.Verify(n =>
+                n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()),
+                Times.Exactly(expectedCalls));
         }
     }
 }
