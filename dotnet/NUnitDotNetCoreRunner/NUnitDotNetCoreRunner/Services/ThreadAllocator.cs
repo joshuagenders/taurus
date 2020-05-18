@@ -47,7 +47,8 @@ namespace NUnitDotNetCoreRunner.Services
                 var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _reportWriterCts.Token);
                 var tasks = new List<Task>
                 {
-                    Task.Run(() => StartThreads(concurrency, rampUpSeconds, _testCts.Token), _testCts.Token)
+                    Task.Run(() => StartThreads(concurrency, rampUpSeconds, _testCts.Token), _testCts.Token),
+                    Task.Run(() => Task.Delay(TestDuration(rampUpSeconds, holdForSeconds)))
                 };
                 if (throughput > 0)
                 {
@@ -74,6 +75,7 @@ namespace NUnitDotNetCoreRunner.Services
         {
             //maybe todo - request desired thread state from thread control and adjust to match
             var threadsRemaining = concurrency;
+            var startTime = DateTime.Now;
             while (InRampup(concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
             {
                 var sleepInterval = TimeSpan.FromSeconds(rampUpSeconds / concurrency);

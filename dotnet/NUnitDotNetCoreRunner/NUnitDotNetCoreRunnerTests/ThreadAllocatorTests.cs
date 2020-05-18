@@ -1,6 +1,8 @@
+using FluentAssertions;
 using Moq;
 using NUnitDotNetCoreRunner.Services;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -39,10 +41,33 @@ namespace NUnitDotNetCoreRunnerTests
                 n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()),
                 Times.Exactly(iterations));
         }
+
+        [Theory]
+        [InlineAutoMoqData(1, 0, 0, 2)]
+        [InlineAutoMoqData(2, 0, 2, 2)]
+        [InlineAutoMoqData(3, 0, 2, 0)]
+        [InlineAutoMoqData(2, 1, 0, 2)]
+        [InlineAutoMoqData(3, 1, 2, 2)]
+        [InlineAutoMoqData(4, 1, 2, 0)]
+        public async Task WhenDurationSpecified_ThenDurationIsObserved(
+            int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds,
+            Mock<IReportWriter> reportWriter,
+            Mock<INUnitAdapter> nUnitAdapter)
+        {
+            var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
+            var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
+
+            var watch = new Stopwatch();
+            watch.Start();
+            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
+            watch.Stop();
+            watch.Elapsed.Should().BeGreaterOrEqualTo(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds));
+        }
         /*
              * todo test cases
-             when tasks are cancelled immediately
-                all tasks exit and no iteration finishes
              when no ramp up
                 threads all queue instantly
                 duration is same as hold for
