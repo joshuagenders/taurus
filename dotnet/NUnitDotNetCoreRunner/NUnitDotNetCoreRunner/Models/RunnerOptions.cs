@@ -10,16 +10,16 @@ namespace NUnitDotNetCoreRunner.Models
         [Option('i', "iterations", Required = false, HelpText = "number of iterations over test suite to make")]
         public int Iterations { get; set; }
 
-        [Option('d', "hold-for", Required = true, HelpText = "the number of minutes to hold execution for")]
+        [Option('d', "hold-for-minutes", Required = true, HelpText = "number of minutes to hold execution for")]
         public int HoldForMinutes { get; set; }
 
         [Option('c', "concurrency", Required = false, HelpText = "number of concurrent users (threads allocated)", Default = 1)]
         public int Concurrency { get; set; }
 
-        [Option('r', "ramp_up_seconds", Required = false, HelpText = "time to ramp all concurrent users")]
+        [Option('r', "ramp-up-minutes", Required = false, HelpText = "time to ramp all concurrent users")]
         public int RampUpMinutes { get; set; }
 
-        [Option('t', "throughput", Required = false, HelpText = "the target tests per second")]
+        [Option('t', "throughput", Required = false, HelpText = "target number of tests per second")]
         public double Throughput { get; set; }
 
         [Option('a', "assembly", Required = true, HelpText = "assembly which will be used to load tests from")]
