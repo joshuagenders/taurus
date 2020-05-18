@@ -15,8 +15,14 @@ namespace NUnitDotNetCoreRunnerTests
         [InlineAutoMoqData(4, 0, 0, 5, 20)]
         [InlineAutoMoqData(3, 0, 0, 3, 1)]
         [InlineAutoMoqData(1, 0, 0, 3, 2)]
+        [InlineAutoMoqData(1, 1, 0, 3, 1)]
+        [InlineAutoMoqData(2, 1, 0, 3, 2)]
+        [InlineAutoMoqData(3, 1, 0, 3, 1)]
+        [InlineAutoMoqData(1, 1, 0, 3, 2)]
+        [InlineAutoMoqData(4, 0, 1, 3, 1)]
+        [InlineAutoMoqData(4, 1, 1, 3, 2)]
 
-        public async Task WhenThreadAllocatorExecutes(
+        public async Task WhenIterationsSpecified_ThenIterationsAreNotExceeded(
             int concurrency,
             double throughput,
             int rampUpSeconds,
@@ -27,16 +33,16 @@ namespace NUnitDotNetCoreRunnerTests
         {
             var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
             var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
-            //cts.CancelAfter(TimeSpan.FromSeconds(2));
 
             await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
             nUnitAdapter.Verify(n =>
                 n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()),
                 Times.Exactly(iterations));
-            /*
+        }
+        /*
              * todo test cases
-             when tasks are cancelled
-                all tasks exit as iteration finishes
+             when tasks are cancelled immediately
+                all tasks exit and no iteration finishes
              when no ramp up
                 threads all queue instantly
                 duration is same as hold for
@@ -58,7 +64,6 @@ namespace NUnitDotNetCoreRunnerTests
                 then iterations are not exceeded
             test duration is not exceeded
              */
-        }
 
         [Theory]
         [InlineAutoMoqData(1, 0, 0, 2, 10, 10)]

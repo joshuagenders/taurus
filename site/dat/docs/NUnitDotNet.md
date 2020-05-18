@@ -37,6 +37,15 @@ Taurus requires the [.NET Core SDK](https://dotnet.microsoft.com/download/dotnet
 version.
 
 Note that `ramp-up` applies to both concurrency and throughput at the same time.
+E.g.
+```yaml
+ramp-up: 1
+concurrency: 6
+throughput: 3
+```
+
+Will result in a new thread every 10 seconds, and the throughput will increase from 0 RPS to 3 RPS over the 1 minute ramp-up time.
+
 
 TODO
 

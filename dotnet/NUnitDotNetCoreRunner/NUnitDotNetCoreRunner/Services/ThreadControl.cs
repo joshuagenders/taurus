@@ -1,5 +1,7 @@
 ﻿using NUnitDotNetCoreRunner.Models;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -52,7 +54,9 @@ namespace NUnitDotNetCoreRunner.Services
         {
             var accumulatedTokens = 0d;
             var total = 0;
-            while (!IsTestComplete() && !ct.IsCancellationRequested)
+            _startTime = DateTime.UtcNow;
+
+            while (!IsTestComplete())
             {
                 accumulatedTokens += _throughput * PercentageThroughRampUp;
                 var tokensToRelease = (int)accumulatedTokens;
@@ -70,21 +74,29 @@ namespace NUnitDotNetCoreRunner.Services
                     {
                         total = int.MaxValue;
                     }
+                    if (ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
                 }
                 accumulatedTokens = Math.Truncate(accumulatedTokens);
-                _taskExecution.Release(tokensToRelease);
-                await Task.Delay(TimeSpan.FromSeconds(1));
+                if (tokensToRelease > 0)
+                {
+                    _taskExecution.Release(tokensToRelease);
+                }
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
             }
         }
  
-        private double SecondsFromStart => _startTime.Subtract(DateTime.UtcNow).TotalSeconds;
+        private double SecondsFromStart => DateTime.UtcNow.Subtract(_startTime).TotalSeconds;
 
-        private double PercentageThroughRampUp => SecondsFromStart > _rampUpSeconds
-            ? 1
-            : SecondsFromStart / _rampUpSeconds;
+        private double PercentageThroughRampUp => 
+            _rampUpSeconds == 0 || SecondsFromStart > _rampUpSeconds
+                ? 1
+                : SecondsFromStart / _rampUpSeconds;
 
         public bool IsTestComplete() =>
-            (_actualIterations > 0 && _iterations >= _actualIterations)
+            (_iterations > 0 && _actualIterations >= _iterations)
             || DateTime.UtcNow > EndTime(_rampUpSeconds, _holdForSeconds);
 
         private DateTime EndTime(int rampUpSeconds, int holdForSeconds) =>
