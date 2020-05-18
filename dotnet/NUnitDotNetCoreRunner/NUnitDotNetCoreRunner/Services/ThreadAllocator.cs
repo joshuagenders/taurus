@@ -79,10 +79,18 @@ namespace NUnitDotNetCoreRunner.Services
             while (InRampup(concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
             {
                 var sleepInterval = TimeSpan.FromSeconds(rampUpSeconds / concurrency);
-                _tasks.Add(Task.Run(() => StartTestLoop()));
-                if (--threadsRemaining <= 0)
+                if (sleepInterval.TotalSeconds > rampUpSeconds)
                 {
-                    break;
+                    sleepInterval = TimeSpan.FromSeconds(rampUpSeconds);
+                }
+
+                if (_tasks.Count < concurrency)
+                {
+                    _tasks.Add(Task.Run(() => StartTestLoop(), _testCts.Token));
+                    if (--threadsRemaining <= 0)
+                    {
+                        break;
+                    }
                 }
                 await Task.Delay(sleepInterval, _testCts.Token);
             }
@@ -94,6 +102,7 @@ namespace NUnitDotNetCoreRunner.Services
 
         private async Task StartTestLoop()
         {
+            var threadName = $"worker_{Guid.NewGuid().ToString("N")}";
             while (!_testCts.IsCancellationRequested)
             {
                 try
@@ -102,7 +111,7 @@ namespace NUnitDotNetCoreRunner.Services
                     if (!_testCts.IsCancellationRequested)
                     {
                         System.Diagnostics.Debug.WriteLine($"Running test");
-                        await _nunit.RunTest($"worker_{Guid.NewGuid().ToString("N")}", _testCts.Token);
+                        await _nunit.RunTest(threadName, _testCts.Token);
                         System.Diagnostics.Debug.WriteLine($"Finished running test");
                     }
                 }

@@ -66,15 +66,41 @@ namespace NUnitDotNetCoreRunnerTests
             watch.Stop();
             watch.Elapsed.Should().BeGreaterOrEqualTo(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds));
         }
+
+        [Theory]
+        [InlineAutoMoqData(3, 1, 2, 3, 25)]
+        [InlineAutoMoqData(1, 0, 2, 2, 1000)]
+        [InlineAutoMoqData(3, 1, 0, 3, 25)]
+        [InlineAutoMoqData(1, 0, 0, 2, 1000)]
+        public async Task WhenMoreIterationsThanDurationAllows_ThenTestExitsEarly(
+            int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds,
+            int iterations,
+            Mock<IReportWriter> reportWriter)
+        {
+            var nUnit = new NUnitAdapterFake();
+            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
+            var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnit);
+
+            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
+
+            nUnit.Calls.Should().BeLessThan(iterations);
+        }
+
+        class NUnitAdapterFake : INUnitAdapter
+        {
+            public int Calls { get; set; } = 0;
+            
+            public async Task RunTest(string threadName, CancellationToken ct)
+            {
+
+                await Task.Delay(TimeSpan.FromMilliseconds(300));
+            }
+        }
         /*
              * todo test cases
-             when no ramp up
-                threads all queue instantly
-                duration is same as hold for
-                threads complete near the same time
-             when iterations
-                then limit applied
-                applied during rampup
              when more iterations than duration allows
                 then test exits before iterations reached
              when throughput 1, <1, >1
@@ -90,25 +116,5 @@ namespace NUnitDotNetCoreRunnerTests
             test duration is not exceeded
              */
 
-        [Theory]
-        [InlineAutoMoqData(1, 0, 0, 2, 10, 10)]
-        public async Task WhenThreadAllocatorExecutes2(
-                  int concurrency,
-            double throughput,
-            int rampUpSeconds,
-            int holdForSeconds,
-            int iterations,
-            int expectedCalls,
-            Mock<IReportWriter> reportWriter,
-            Mock<INUnitAdapter> nUnitAdapter)
-        {
-            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
-            var threadAllocator = new ThreadAllocator(reportWriter.Object, threadControl, nUnitAdapter.Object);
-
-            await threadAllocator.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
-            nUnitAdapter.Verify(n =>
-                n.RunTest(It.IsRegex("worker_.+"), It.IsAny<CancellationToken>()),
-                Times.Exactly(expectedCalls));
-        }
     }
 }
