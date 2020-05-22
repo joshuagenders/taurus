@@ -36,7 +36,8 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<INUnitAdapter> nUnitAdapter)
         {
             var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
-            var app = new Application(reportWriter.Object, threadControl, nUnitAdapter.Object);
+            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
+            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
 
             await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
             nUnitAdapter.Verify(n =>
@@ -60,7 +61,8 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<INUnitAdapter> nUnitAdapter)
         {
             var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
-            var app = new Application(reportWriter.Object, threadControl, nUnitAdapter.Object);
+            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
+            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
 
             var watch = new Stopwatch();
             watch.Start();
@@ -84,7 +86,8 @@ namespace NUnitDotNetCoreRunnerTests
         {
             var nUnit = new NUnitAdapterFake();
             var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
-            var app = new Application(reportWriter.Object, threadControl, nUnit);
+            var threadAllocator = new ThreadAllocator(nUnit, threadControl);
+            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
 
             await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
 
@@ -111,7 +114,8 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<INUnitAdapter> nUnitAdapter)
         {
             var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
-            var app = new Application(reportWriter.Object, threadControl, nUnitAdapter.Object);
+            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
+            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
 
             await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds);
 
@@ -132,7 +136,7 @@ namespace NUnitDotNetCoreRunnerTests
             public void RunTest(string threadName)
             {
                 Interlocked.Increment(ref Calls);
-                Thread.Sleep(TimeSpan.FromMilliseconds(300));
+                Thread.SpinWait(300);
             }
         }
         /*

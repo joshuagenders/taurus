@@ -15,7 +15,9 @@ namespace NUnitDotNetCoreRunner.Services
         public int _holdForSeconds { get; }
 
         private int _executionRequestCount;
-        
+
+        private static Mutex _mutex = new Mutex();
+
         public ThreadControl(double throughput, int iterations, int rampUpSeconds, int holdForSeconds)
         {
             _taskExecution = new SemaphoreSlim(0);
@@ -37,7 +39,18 @@ namespace NUnitDotNetCoreRunner.Services
         public async Task<bool> RequestTaskExecution(CancellationToken ct)
         {
             if (_enabled) await _taskExecution.WaitAsync(ct);
-            return !ct.IsCancellationRequested;
+            int iterations;
+            try
+            {
+                _mutex.WaitOne();
+                iterations = Interlocked.Increment(ref _executionRequestCount);
+            }
+            finally
+            {
+                _mutex.ReleaseMutex();
+            }
+            var iterationsExceeded = iterations > _iterations;
+            return iterationsExceeded;
         }
 
         private int TotalAllowedRequestsToNow(int millisecondsEllapsed)
@@ -59,11 +72,9 @@ namespace NUnitDotNetCoreRunner.Services
             return Convert.ToInt32(totalRpsToNow);
         }
 
-        public async Task ReleaseTokens(CancellationToken ct)
+        public async Task ReleaseTokens(DateTime startTime, CancellationToken ct)
         {
             var tokensReleased = 0;
-            DateTime startTime = DateTime.UtcNow;
-
             while (!IsTestComplete(startTime))
             {
                 var millisecondsEllapsed = Convert.ToInt32(DateTime.UtcNow.Subtract(startTime).TotalMilliseconds);
@@ -103,6 +114,6 @@ namespace NUnitDotNetCoreRunner.Services
     {
         Task<bool> RequestTaskExecution(CancellationToken ct);
         int ReleaseTaskExecution(int count = 1);
-        Task ReleaseTokens(CancellationToken ct);
+        Task ReleaseTokens(DateTime startTime, CancellationToken ct);
     }
 }

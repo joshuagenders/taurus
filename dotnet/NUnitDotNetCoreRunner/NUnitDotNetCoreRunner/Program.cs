@@ -26,7 +26,8 @@ namespace NUnitRunner
                     var reportWriter = new ReportWriter(reportItems, o.ReportFile);
                     var threadControl = new ThreadControl(o.Throughput, o.Iterations, o.RampUpMinutes * 60, o.HoldForMinutes * 60);
                     var nunitAdapter = new NUnitAdapter(o.TargetAssembly, o.TestName, reportItems);
-                    var app = new Application(reportWriter, threadControl, nunitAdapter);
+                    var threadAllocator = new ThreadAllocator(nunitAdapter, threadControl);
+                    var app = new Application(reportWriter, threadAllocator, threadControl);
                     await app.Run(o.Concurrency, o.Throughput, o.RampUpMinutes * 60, o.HoldForMinutes * 60);
                 });
         }

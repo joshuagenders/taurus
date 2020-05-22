@@ -10,7 +10,6 @@ namespace NUnitDotNetCoreRunner.Services
         private readonly INUnitAdapter _nUnitAdapter;
         private readonly IThreadControl _threadControl;
         private readonly List<Task> _tasks;
-        private DateTime _startTime { get; set; }
 
         public ThreadAllocator(INUnitAdapter nUnitAdapter, IThreadControl threadControl)
         {
@@ -19,12 +18,11 @@ namespace NUnitDotNetCoreRunner.Services
             _threadControl = threadControl;
         }
 
-        public async Task StartThreads(int concurrency, int rampUpSeconds, CancellationToken ct)
+        public async Task StartThreads(DateTime startTime, int concurrency, int rampUpSeconds, CancellationToken ct)
         {
             //maybe todo - request desired thread state from thread control and adjust to match
             var threadsRemaining = concurrency;
-            _startTime = DateTime.Now;
-            while (InRampup(concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
+            while (InRampup(startTime, concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
             {
                 var sleepInterval = TimeSpan.FromSeconds(rampUpSeconds / concurrency);
                 if (sleepInterval.TotalSeconds > rampUpSeconds)
@@ -67,35 +65,32 @@ namespace NUnitDotNetCoreRunner.Services
         private async Task TestLoop(CancellationToken ct)
         {
             var threadName = $"worker_{Guid.NewGuid().ToString("N")}";
-            while (!ct.IsCancellationRequested)
+            var iterationsExceeded = false;
+            while (!ct.IsCancellationRequested && !iterationsExceeded)
             {
-                var canRun = false;
                 try
                 {
-                    canRun = await _threadControl.RequestTaskExecution(ct);
-                    if (!ct.IsCancellationRequested && canRun)
+                    iterationsExceeded = await _threadControl.RequestTaskExecution(ct);
+                    if (!ct.IsCancellationRequested && iterationsExceeded)
                     {
                         _nUnitAdapter.RunTest(threadName);
                     }
                 }
                 finally
                 {
-                    if (canRun)
-                    {
-                        _threadControl.ReleaseTaskExecution();
-                    }
+                    _threadControl.ReleaseTaskExecution();
                 }
             };
         }
 
-        private bool InRampup(int concurrency, int rampUpSeconds) =>
+        private bool InRampup(DateTime startTime, int concurrency, int rampUpSeconds) =>
             concurrency > 1
             && rampUpSeconds > 1
-            && _startTime.AddSeconds(rampUpSeconds) > DateTime.UtcNow;
+            && startTime.AddSeconds(rampUpSeconds) > DateTime.UtcNow;
     }
 
     public interface IThreadAllocator
     {
-        Task StartThreads(int concurrency, int rampUpSeconds, CancellationToken ct);
+        Task StartThreads(DateTime startTime, int concurrency, int rampUpSeconds, CancellationToken ct);
     }
 }
