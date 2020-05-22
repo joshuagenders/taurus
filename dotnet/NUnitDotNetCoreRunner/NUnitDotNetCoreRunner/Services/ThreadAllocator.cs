@@ -65,13 +65,13 @@ namespace NUnitDotNetCoreRunner.Services
         private async Task TestLoop(DateTime startTime, CancellationToken ct)
         {
             var threadName = $"worker_{Guid.NewGuid().ToString("N")}";
-            bool iterationsExceeded = false;
-            while (!ct.IsCancellationRequested && !iterationsExceeded)
+            bool testCompleted = false;
+            while (!ct.IsCancellationRequested && !testCompleted)
             {
                 try
                 {
-                    iterationsExceeded = await _threadControl.RequestTaskExecution(ct);
-                    if (!ct.IsCancellationRequested && !iterationsExceeded)
+                    testCompleted = await _threadControl.RequestTaskExecution(startTime, ct);
+                    if (!ct.IsCancellationRequested && !testCompleted)
                     {
                         _nUnitAdapter.RunTest(threadName);
                     }

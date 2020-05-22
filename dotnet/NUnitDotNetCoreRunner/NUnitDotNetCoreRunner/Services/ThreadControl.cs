@@ -36,7 +36,7 @@ namespace NUnitDotNetCoreRunner.Services
                 : 0;
         }
 
-        public async Task<bool> RequestTaskExecution(CancellationToken ct)
+        public async Task<bool> RequestTaskExecution(DateTime startTime, CancellationToken ct)
         {
             if (_enabled) await _taskExecution.WaitAsync(ct);
             int iterations;
@@ -49,8 +49,7 @@ namespace NUnitDotNetCoreRunner.Services
             {
                 _mutex.ReleaseMutex();
             }
-            var iterationsExceeded = (_iterations > 0 && _executionRequestCount > _iterations);
-            return iterationsExceeded;
+            return IsTestComplete(startTime, iterations);
         }
 
         private int TotalAllowedRequestsToNow(int millisecondsEllapsed)
@@ -75,7 +74,7 @@ namespace NUnitDotNetCoreRunner.Services
         public async Task ReleaseTokens(DateTime startTime, CancellationToken ct)
         {
             var tokensReleased = 0;
-            while (!IsTestComplete(startTime) && !ct.IsCancellationRequested)
+            while (!DurationComplete(startTime) && !ct.IsCancellationRequested)
             {
                 var millisecondsEllapsed = Convert.ToInt32(DateTime.UtcNow.Subtract(startTime).TotalMilliseconds);
                 var tokensToNow = TotalAllowedRequestsToNow(millisecondsEllapsed);
@@ -105,8 +104,14 @@ namespace NUnitDotNetCoreRunner.Services
             }
         }
 
-        private bool IsTestComplete(DateTime startTime) => 
+        private bool IsTestComplete(DateTime startTime, int iterations) => 
+            DurationComplete(startTime) || IterationsExceeded(iterations);
+
+        private bool DurationComplete(DateTime startTime) => 
             DateTime.UtcNow >= EndTime(startTime, _rampUpSeconds, _holdForSeconds);
+
+        private bool IterationsExceeded(int iterations) =>
+            _iterations > 0 && iterations > _iterations;
 
         private DateTime EndTime(DateTime startTime, int rampUpSeconds, int holdForSeconds) =>
             startTime.AddSeconds(rampUpSeconds + holdForSeconds);
@@ -114,7 +119,7 @@ namespace NUnitDotNetCoreRunner.Services
 
     public interface IThreadControl
     {
-        Task<bool> RequestTaskExecution(CancellationToken ct);
+        Task<bool> RequestTaskExecution(DateTime startTime, CancellationToken ct);
         int ReleaseTaskExecution(int count = 1);
         Task ReleaseTokens(DateTime startTime, CancellationToken ct);
     }
