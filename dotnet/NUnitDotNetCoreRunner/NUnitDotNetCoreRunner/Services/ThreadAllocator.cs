@@ -71,7 +71,7 @@ namespace NUnitDotNetCoreRunner.Services
                 try
                 {
                     iterationsExceeded = await _threadControl.RequestTaskExecution(ct);
-                    if (!ct.IsCancellationRequested && iterationsExceeded)
+                    if (!ct.IsCancellationRequested && !iterationsExceeded)
                     {
                         _nUnitAdapter.RunTest(threadName);
                     }
