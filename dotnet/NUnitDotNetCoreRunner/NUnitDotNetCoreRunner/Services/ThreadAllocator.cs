@@ -30,7 +30,7 @@ namespace NUnitDotNetCoreRunner.Services
                     sleepInterval = TimeSpan.FromSeconds(rampUpSeconds);
                 }
 
-                if (StartTask(concurrency, ct))
+                if (StartTask(startTime, concurrency, ct))
                 {
                     if (--threadsRemaining <= 0)
                     {
@@ -45,27 +45,27 @@ namespace NUnitDotNetCoreRunner.Services
             }
             for (var i = 0; i < threadsRemaining; i++)
             {
-                if (!StartTask(concurrency, ct))
+                if (!StartTask(startTime, concurrency, ct))
                 {
                     break;
                 }
             }
         }
 
-        private bool StartTask(int concurrency, CancellationToken ct)
+        private bool StartTask(DateTime startTime, int concurrency, CancellationToken ct)
         {
             if (_tasks.Count < concurrency)
             {
-                _tasks.Add(Task.Run(() => TestLoop(ct), ct));
+                _tasks.Add(Task.Run(() => TestLoop(startTime, ct), ct));
                 return true;
             }
             return false;
         }
 
-        private async Task TestLoop(CancellationToken ct)
+        private async Task TestLoop(DateTime startTime, CancellationToken ct)
         {
             var threadName = $"worker_{Guid.NewGuid().ToString("N")}";
-            var iterationsExceeded = false;
+            bool iterationsExceeded = false;
             while (!ct.IsCancellationRequested && !iterationsExceeded)
             {
                 try

@@ -47,7 +47,7 @@ namespace NUnitDotNetCoreRunner.Services
                 var tasks = new List<Task>
                 {
                     Task.Run(() => _threadAllocator.StartThreads(startTime, concurrency, rampUpSeconds, _testCts.Token), _testCts.Token),
-                    Task.Run(() => Task.Delay(TestDuration(rampUpSeconds, holdForSeconds)))
+                    Task.Run(() => Task.Delay(TestDuration(rampUpSeconds, holdForSeconds), _testCts.Token))
                 };
                 if (throughput > 0)
                 {
@@ -57,7 +57,7 @@ namespace NUnitDotNetCoreRunner.Services
                 await Task.WhenAll(tasks);
                 await Task.WhenAll(_tasks);
                 _reportWriter.TestsCompleted = true;
-                _reportWriterCts.CancelAfter(TimeSpan.FromSeconds(30));
+                _reportWriterCts.CancelAfter(TimeSpan.FromSeconds(5));
                 await reportWriterTask;
             }
             catch (TaskCanceledException) { }

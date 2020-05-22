@@ -13,18 +13,18 @@ namespace NUnitDotNetCoreRunnerTests
     public class ApplicationTests
     {
         [Theory]
-        // [InlineAutoMoqData(1, 0, 0, 2, 1)]
-        // [InlineAutoMoqData(2, 0, 0, 2, 2)]
-        // [InlineAutoMoqData(4, 0, 0, 2, 20)]
-        // [InlineAutoMoqData(3, 0, 0, 2, 1)]
-        // [InlineAutoMoqData(1, 0, 0, 2, 2)]
-        // [InlineAutoMoqData(1, 1, 0, 2, 1)]
-        // [InlineAutoMoqData(2, 1, 0, 2, 2)]
-        // [InlineAutoMoqData(3, 1, 0, 2, 1)]
-        // [InlineAutoMoqData(1, 1, 0, 2, 2)]
-        // [InlineAutoMoqData(4, 0, 1, 2, 1)]
-        // [InlineAutoMoqData(4, 1, 1, 2, 2)]
-        [InlineAutoMoqData(2, 0.9, 0, 6, 1)]
+        [InlineAutoMoqData(1, 0, 0, 2, 1)]
+        [InlineAutoMoqData(2, 0, 0, 2, 2)]
+        [InlineAutoMoqData(4, 0, 0, 2, 20)]
+        [InlineAutoMoqData(3, 0, 0, 2, 1)]
+        [InlineAutoMoqData(1, 0, 0, 2, 2)]
+        [InlineAutoMoqData(1, 1, 0, 2, 1)]
+        [InlineAutoMoqData(2, 1, 0, 2, 2)]
+        [InlineAutoMoqData(3, 1, 0, 2, 1)]
+        [InlineAutoMoqData(1, 1, 0, 2, 2)]
+        [InlineAutoMoqData(4, 0, 1, 2, 1)]
+        [InlineAutoMoqData(4, 1, 1, 2, 2)]
+        //[InlineAutoMoqData(2, 0.9, 0, 6, 1)]
 
         public async Task WhenIterationsSpecified_ThenIterationsAreNotExceeded(
             int concurrency,
@@ -105,6 +105,7 @@ namespace NUnitDotNetCoreRunnerTests
         [InlineAutoMoqData(1, 0.8, 2, 4)]
         [InlineAutoMoqData(2, 2, 2, 4)]
         [InlineAutoMoqData(2, 20, 2, 4)]
+        //[InlineAutoMoqData(1, 1, 30, 120)]
         public async Task WhenThroughputIsSpecified_ThenRPSIsNotExceeded(
             int concurrency,
             double throughput,
@@ -136,7 +137,7 @@ namespace NUnitDotNetCoreRunnerTests
             public void RunTest(string threadName)
             {
                 Interlocked.Increment(ref Calls);
-                Thread.SpinWait(300);
+                Thread.Sleep(600);
             }
         }
         /*

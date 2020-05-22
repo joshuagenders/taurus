@@ -49,7 +49,7 @@ namespace NUnitDotNetCoreRunner.Services
             {
                 _mutex.ReleaseMutex();
             }
-            var iterationsExceeded = iterations > _iterations;
+            var iterationsExceeded = (_iterations > 0 && _executionRequestCount > _iterations);
             return iterationsExceeded;
         }
 
@@ -75,7 +75,7 @@ namespace NUnitDotNetCoreRunner.Services
         public async Task ReleaseTokens(DateTime startTime, CancellationToken ct)
         {
             var tokensReleased = 0;
-            while (!IsTestComplete(startTime))
+            while (!IsTestComplete(startTime) && !ct.IsCancellationRequested)
             {
                 var millisecondsEllapsed = Convert.ToInt32(DateTime.UtcNow.Subtract(startTime).TotalMilliseconds);
                 var tokensToNow = TotalAllowedRequestsToNow(millisecondsEllapsed);
@@ -94,17 +94,19 @@ namespace NUnitDotNetCoreRunner.Services
                             tokensToRelease = _iterations - tokensReleased;
                         }
                     }
-                    tokensReleased += tokensToRelease;
-                    _taskExecution.Release(tokensToRelease);
+                    if (tokensToRelease > 0)
+                    {
+                        tokensReleased += tokensToRelease;
+                        _taskExecution.Release(tokensToRelease);
+                    }
                 }
 
                 await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
             }
         }
 
-        private bool IsTestComplete(DateTime startTime) =>
-            (_iterations > 0 && _executionRequestCount >= _iterations)
-            || DateTime.UtcNow > EndTime(startTime, _rampUpSeconds, _holdForSeconds);
+        private bool IsTestComplete(DateTime startTime) => 
+            DateTime.UtcNow >= EndTime(startTime, _rampUpSeconds, _holdForSeconds);
 
         private DateTime EndTime(DateTime startTime, int rampUpSeconds, int holdForSeconds) =>
             startTime.AddSeconds(rampUpSeconds + holdForSeconds);
