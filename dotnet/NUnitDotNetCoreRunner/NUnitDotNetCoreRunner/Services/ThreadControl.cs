@@ -1,7 +1,4 @@
-﻿using NUnitDotNetCoreRunner.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,10 +14,8 @@ namespace NUnitDotNetCoreRunner.Services
         public int _rampUpSeconds { get; }
         public int _holdForSeconds { get; }
 
-        private int _actualIterations;
-        private DateTime _startTime { get; set; }
-        private DateTime _lastTokenRequest { get; set; }
-
+        private int _executionRequestCount;
+        
         public ThreadControl(double throughput, int iterations, int rampUpSeconds, int holdForSeconds)
         {
             _taskExecution = new SemaphoreSlim(0);
@@ -29,7 +24,7 @@ namespace NUnitDotNetCoreRunner.Services
             _rampUpSeconds = rampUpSeconds;
             _holdForSeconds = holdForSeconds;
             _enabled = throughput > 0;
-            _actualIterations = 0;
+            _executionRequestCount = 0;
         }
 
         public int ReleaseTaskExecution(int count = 1) 
@@ -39,75 +34,75 @@ namespace NUnitDotNetCoreRunner.Services
                 : 0;
         }
 
-        public async Task RequestTaskExecution(CancellationToken ct)
+        public async Task<bool> RequestTaskExecution(CancellationToken ct)
         {
             if (_enabled) await _taskExecution.WaitAsync(ct);
-            //todo locking
-            var actualIterations = Interlocked.Increment(ref _actualIterations);
-            if (actualIterations > _iterations)
-            {
-                throw new IterationsExceededException($"Iterations exceeded. Iterations: {_iterations}. Actual: ${actualIterations}");
+            return !ct.IsCancellationRequested;
+        }
+
+        private int TotalAllowedRequestsToNow(int millisecondsEllapsed)
+        {
+            if (millisecondsEllapsed <= 0 || _throughput <= 0) { 
+                return 0;
             }
+            double totalRpsToNow;
+            var secondsEllapsed = Convert.ToInt32(millisecondsEllapsed / 1000);
+            if (_rampUpSeconds > 0 && secondsEllapsed > _rampUpSeconds)
+            {
+                totalRpsToNow = (_throughput * _rampUpSeconds / 2)
+                    + (secondsEllapsed - _rampUpSeconds) * _throughput;
+            }
+            else
+            {
+                totalRpsToNow = (_throughput * millisecondsEllapsed) / 1000 / 2;
+            }
+            return Convert.ToInt32(totalRpsToNow);
         }
 
         public async Task ReleaseTokens(CancellationToken ct)
         {
-            var accumulatedTokens = 0d;
-            var total = 0;
-            _startTime = DateTime.UtcNow;
+            var tokensReleased = 0;
+            DateTime startTime = DateTime.UtcNow;
 
-            while (!IsTestComplete())
+            while (!IsTestComplete(startTime))
             {
-                accumulatedTokens += _throughput * PercentageThroughRampUp;
-                var tokensToRelease = (int)accumulatedTokens;
-                if (_iterations > 0)
+                var millisecondsEllapsed = Convert.ToInt32(DateTime.UtcNow.Subtract(startTime).TotalMilliseconds);
+                var tokensToNow = TotalAllowedRequestsToNow(millisecondsEllapsed);
+
+                if (tokensToNow > tokensReleased)
                 {
-                    if (tokensToRelease + total > _iterations)
+                    var tokensToRelease = Convert.ToInt32(tokensToNow - tokensReleased);
+                    if (_iterations > 0)
                     {
-                        tokensToRelease = _iterations - total;
+                        if (int.MaxValue - tokensToRelease < tokensReleased)
+                        {
+                            tokensToRelease = int.MaxValue - tokensReleased;
+                        }
+                        if (tokensToRelease + tokensReleased > _iterations)
+                        {
+                            tokensToRelease = _iterations - tokensReleased;
+                        }
                     }
-                    if (int.MaxValue - tokensToRelease < total)
-                    {
-                        total += (int)accumulatedTokens;
-                    }
-                    else
-                    {
-                        total = int.MaxValue;
-                    }
-                    if (ct.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                }
-                accumulatedTokens = Math.Truncate(accumulatedTokens);
-                if (tokensToRelease > 0)
-                {
+                    tokensReleased += tokensToRelease;
                     _taskExecution.Release(tokensToRelease);
                 }
-                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
             }
         }
- 
-        private double SecondsFromStart => DateTime.UtcNow.Subtract(_startTime).TotalSeconds;
 
-        private double PercentageThroughRampUp => 
-            _rampUpSeconds == 0 || SecondsFromStart > _rampUpSeconds
-                ? 1
-                : SecondsFromStart / _rampUpSeconds;
+        private bool IsTestComplete(DateTime startTime) =>
+            (_iterations > 0 && _executionRequestCount >= _iterations)
+            || DateTime.UtcNow > EndTime(startTime, _rampUpSeconds, _holdForSeconds);
 
-        public bool IsTestComplete() =>
-            (_iterations > 0 && _actualIterations >= _iterations)
-            || DateTime.UtcNow > EndTime(_rampUpSeconds, _holdForSeconds);
-
-        private DateTime EndTime(int rampUpSeconds, int holdForSeconds) =>
-            _startTime.AddSeconds(rampUpSeconds + holdForSeconds);
+        private DateTime EndTime(DateTime startTime, int rampUpSeconds, int holdForSeconds) =>
+            startTime.AddSeconds(rampUpSeconds + holdForSeconds);
     }
 
     public interface IThreadControl
     {
-        Task RequestTaskExecution(CancellationToken ct);
+        Task<bool> RequestTaskExecution(CancellationToken ct);
         int ReleaseTaskExecution(int count = 1);
-        bool IsTestComplete();
         Task ReleaseTokens(CancellationToken ct);
     }
 }

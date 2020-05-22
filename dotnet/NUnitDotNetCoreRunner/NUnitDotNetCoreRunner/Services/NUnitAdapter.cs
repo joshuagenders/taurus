@@ -2,14 +2,11 @@
 using NUnitDotNetCoreRunner.Models;
 using System;
 using System.Collections.Concurrent;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NUnitDotNetCoreRunner.Services
 {
     public class NUnitAdapter : INUnitAdapter
     {
-        private readonly IThreadControl _threadControl;
         private readonly ITestEngine _engine;
         private readonly TestPackage _package;
         private readonly ConcurrentQueue<ReportItem> _reportItems;
@@ -17,11 +14,9 @@ namespace NUnitDotNetCoreRunner.Services
 
         public NUnitAdapter(
             string targetAssembly, 
-            string testName, 
-            IThreadControl threadControl, 
+            string testName,
             ConcurrentQueue<ReportItem> reportItems)
         {
-            _threadControl = threadControl;
             _engine = TestEngineActivator.CreateInstance();
             _package = new TestPackage(targetAssembly);
             _reportItems = reportItems;
@@ -38,26 +33,15 @@ namespace NUnitDotNetCoreRunner.Services
             }
         }
 
-        public async Task RunTest(string threadName, CancellationToken ct)
+        public void RunTest(string threadName)
         {
-            while (!ct.IsCancellationRequested)
-            {
-                await _threadControl.RequestTaskExecution(ct);
-                try
-                {
-                    var runner = _engine.GetRunner(_package);
-                    runner.Run(new TestEventListener(_reportItems, threadName), _filter);
-                }
-                finally
-                {
-                    _threadControl.ReleaseTaskExecution();
-                }
-            };
+            var runner = _engine.GetRunner(_package);
+            runner.Run(new TestEventListener(_reportItems, threadName), _filter);
         }
     }
 
     public interface INUnitAdapter
     {
-        Task RunTest(string threadName, CancellationToken ct);
+        void RunTest(string threadName);
     }
 }

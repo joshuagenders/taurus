@@ -1,0 +1,146 @@
+﻿using NUnitDotNetCoreRunner.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace NUnitDotNetCoreRunner.Services
+{
+    public class Application : IApplication
+    {
+        private readonly INUnitAdapter _nunit;
+        private readonly IReportWriter _reportWriter;
+        private readonly IThreadControl _threadControl;
+        private readonly IThreadAllocator _threadAllocator;
+        private readonly CancellationTokenSource _testCts;
+        private readonly CancellationTokenSource _reportWriterCts;
+        private readonly List<Task> _tasks;
+        private readonly SemaphoreSlim _executionSemaphore;
+        private DateTime _startTime { get; set; } = DateTime.UtcNow;
+
+        public Application(
+            IReportWriter reportWriter,
+            IThreadControl threadControl,
+            INUnitAdapter nUnitAdapter)
+        {
+            _reportWriter = reportWriter;
+            _threadControl = threadControl;
+            _nunit = nUnitAdapter;
+            _executionSemaphore = new SemaphoreSlim(1);
+            _testCts = new CancellationTokenSource();
+            _reportWriterCts = new CancellationTokenSource();
+            _tasks = new List<Task>();
+        }
+
+        public async Task Run(
+            int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds)
+        {
+            await _executionSemaphore.WaitAsync();
+            _testCts.CancelAfter(TestDuration(rampUpSeconds, holdForSeconds));
+            _startTime = DateTime.UtcNow;
+
+            try
+            {
+                var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _reportWriterCts.Token);
+                var tasks = new List<Task>
+                {
+                    Task.Run(() => StartThreads(concurrency, rampUpSeconds, _testCts.Token), _testCts.Token),
+                    Task.Run(() => Task.Delay(TestDuration(rampUpSeconds, holdForSeconds)))
+                };
+                if (throughput > 0)
+                {
+                    tasks.Add(Task.Run(() => _threadControl.ReleaseTokens(_testCts.Token), _testCts.Token));
+                }
+
+                await Task.WhenAll(tasks);
+                await Task.WhenAll(_tasks);
+                _reportWriter.TestsCompleted = true;
+                _reportWriterCts.CancelAfter(TimeSpan.FromSeconds(30));
+                await reportWriterTask;
+            }
+            catch (TaskCanceledException) { }
+            catch (OperationCanceledException) { }
+            catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
+            finally
+            {
+                _executionSemaphore.Release();
+            }
+        }
+
+        private async Task StartThreads(int concurrency, int rampUpSeconds, CancellationToken ct)
+        {
+            //maybe todo - request desired thread state from thread control and adjust to match
+            var threadsRemaining = concurrency;
+            var startTime = DateTime.Now;
+            while (InRampup(concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
+            {
+                var sleepInterval = TimeSpan.FromSeconds(rampUpSeconds / concurrency);
+                if (sleepInterval.TotalSeconds > rampUpSeconds)
+                {
+                    sleepInterval = TimeSpan.FromSeconds(rampUpSeconds);
+                }
+
+                if (_tasks.Count < concurrency)
+                {
+                    _tasks.Add(Task.Run(() => StartTestLoop(), _testCts.Token));
+                    if (--threadsRemaining <= 0)
+                    {
+                        break;
+                    }
+                }
+                await Task.Delay(sleepInterval, _testCts.Token);
+            }
+            for (var i = 0; i < threadsRemaining; i++)
+            {
+                _tasks.Add(Task.Run(() => StartTestLoop(), _testCts.Token));
+            }
+        }
+
+        private async Task StartTestLoop()
+        {
+            var threadName = $"worker_{Guid.NewGuid().ToString("N")}";
+            while (!_testCts.IsCancellationRequested)
+            {
+                var token = false;
+                try
+                {
+                    token = await _threadControl.RequestTaskExecution(_testCts.Token);
+                    if (token && !_testCts.IsCancellationRequested)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Running test");
+                        _nunit.RunTest(threadName);
+                        System.Diagnostics.Debug.WriteLine($"Finished running test");
+                    }
+                }
+                finally
+                {
+                    if (token)
+                    {
+                        _threadControl.ReleaseTaskExecution();
+                    }
+                }
+            };
+        }
+
+        private bool InRampup(int concurrency, int rampUpSeconds) => 
+            concurrency > 1 
+            && rampUpSeconds > 1 
+            && _startTime.AddSeconds(rampUpSeconds) < DateTime.UtcNow;
+
+        private TimeSpan TestDuration (int rampUpSeconds, int holdForSeconds) => 
+            TimeSpan.FromSeconds(rampUpSeconds + holdForSeconds);
+    }
+
+    public interface IApplication
+    {
+        Task Run(
+            int concurrency,
+            double throughput,
+            int rampUpSeconds,
+            int holdForSeconds);
+    }
+}
