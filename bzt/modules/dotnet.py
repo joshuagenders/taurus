@@ -49,18 +49,24 @@ class NUnitDotNetCoreExecutor(SubprocessedExecutor, HavingInstallableTools):
             cmdline.append(self.dotnet.tool_path)
 
         cmdline += [self.runner_executable,
-                    "--target", self.script,
+                    "--assembly", self.script,
                     "--report-file", self.report_file]
+
+        testname = self.get_scenario().get("testname", None)
+        if testname:
+            cmdline += ['--testname', testname]
 
         load = self.get_load()
         if load.iterations:
             cmdline += ['--iterations', str(load.iterations)]
         if load.hold:
-            cmdline += ['--duration', str(int(load.hold))]
+            cmdline += ['--hold-for', str(int(load.hold))]
         if load.concurrency:
             cmdline += ['--concurrency', str(int(load.concurrency))]
         if load.ramp_up:
-            cmdline += ['--ramp_up', str(int(load.ramp_up))]
+            cmdline += ['--ramp-up', str(int(load.ramp_up))]
+        if load.throughput:
+            cmdline += ['--throughput', str(int(load.throughput))]
         
         self.process = self._execute(cmdline)
 

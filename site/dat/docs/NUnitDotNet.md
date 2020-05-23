@@ -8,14 +8,16 @@ Usage:
 ```yaml
 execution:
 - executor: nunit-dotnet
-  ramp-up: 120
+  ramp-up: 2m
   concurrency: 10
-  iterations: 5
+  iterations: 500
+  throughput: 20
   scenario:
-    script: bin/Release/TestAssembly.dll  # assembly with tests
+    script: bin/Release/TestAssembly.dll
+    testname: BrowserExample
 ```
 
-
+Two threads executing two tests per second (1 each thread).
 ```yaml
 execution:
 - executor: nunit-dotnet
@@ -45,23 +47,3 @@ throughput: 3
 ```
 
 Will result in a new thread every 10 seconds, and the throughput will increase from 0 RPS to 3 RPS over the 1 minute ramp-up time.
-
-
-TODO
-
-Update docs
-add example tests for selenium + http client factory
-
-Test cases
-===========
-unit test project + example tests:
-variable scopes across threads - counter, static, concurrentdictionary, constructor readonly
-dependency injection - http client
-failures, exceptions
-use a http interceptor
-
-integration tests run from python
-
- 
- 
- 

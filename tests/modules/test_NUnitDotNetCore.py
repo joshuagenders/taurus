@@ -17,8 +17,8 @@ class TestNUnitDotNetCoreExecutor(SeleniumTestCase):
         if self.obj.runner.dotnet:
             self.obj.runner.dotnet.tool_path = None
 
-        self.obj.runner.runner_dir = RESOURCES_DIR + "selenium/nunit-dotnet/bin/"
-        self.obj.runner.runner_executable = RESOURCES_DIR + "selenium/nunit-dotnet/bin/" + RUNNER_EXECUTABLE
+        self.obj.runner.runner_dir = RESOURCES_DIR + "nunit/bin/"
+        self.obj.runner.runner_executable = RESOURCES_DIR + "nunit/bin/" + RUNNER_EXECUTABLE
 
     def test_startup(self):
         self.obj.execution.merge({
