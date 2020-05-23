@@ -3,6 +3,7 @@ using NUnitDotNetCoreRunner.Models;
 using NUnitDotNetCoreRunner.Services;
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NUnitRunner
@@ -22,13 +23,14 @@ namespace NUnitRunner
                 .WithParsedAsync(async o =>
                 {
                     PrintConfig(o);
+                    var cts = new CancellationTokenSource();
                     var reportItems = new ConcurrentQueue<ReportItem>();
                     var reportWriter = new ReportWriter(reportItems, o.ReportFile);
                     var threadControl = new ThreadControl(o.Throughput, o.Iterations, o.RampUpMinutes * 60, o.HoldForMinutes * 60);
                     var nunitAdapter = new NUnitAdapter(o.TargetAssembly, o.TestName, reportItems);
                     var threadAllocator = new ThreadAllocator(nunitAdapter, threadControl);
                     var app = new Application(reportWriter, threadAllocator, threadControl);
-                    await app.Run(o.Concurrency, o.Throughput, o.RampUpMinutes * 60, o.HoldForMinutes * 60);
+                    await app.Run(o.Concurrency, o.Throughput, o.RampUpMinutes * 60, o.HoldForMinutes * 60, cts.Token);
                 });
         }
 

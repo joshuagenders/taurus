@@ -1,6 +1,4 @@
-﻿using NUnitDotNetCoreRunner.Models;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,9 +10,6 @@ namespace NUnitDotNetCoreRunner.Services
         private readonly IReportWriter _reportWriter;
         private readonly IThreadControl _threadControl;
         private readonly IThreadAllocator _threadAllocator;
-        private readonly CancellationTokenSource _testCts;
-        private readonly CancellationTokenSource _reportWriterCts;
-        private readonly List<Task> _tasks;
         private readonly SemaphoreSlim _executionSemaphore;
 
         public Application(
@@ -26,47 +21,41 @@ namespace NUnitDotNetCoreRunner.Services
             _threadControl = threadControl;
             _threadAllocator = threadAllocator;
             _executionSemaphore = new SemaphoreSlim(1);
-            _testCts = new CancellationTokenSource();
-            _reportWriterCts = new CancellationTokenSource();
-            _tasks = new List<Task>();
         }
 
         public async Task Run(
             int concurrency,
             double throughput,
             int rampUpSeconds,
-            int holdForSeconds)
+            int holdForSeconds,
+            CancellationToken ct)
         {
-            await _executionSemaphore.WaitAsync();
+            await _executionSemaphore.WaitAsync(ct);
             var startTime = DateTime.UtcNow;
-            _testCts.CancelAfter(TestDuration(rampUpSeconds, holdForSeconds));
-            
+            var testDuration = TestDuration(rampUpSeconds, holdForSeconds);
+            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), ct);
+
             try
             {
-                var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), _reportWriterCts.Token);
-                var tasks = new List<Task>
-                {
-                    Task.Run(() => _threadAllocator.StartThreads(startTime, concurrency, rampUpSeconds, _testCts.Token), _testCts.Token),
-                    Task.Run(() => Task.Delay(TestDuration(rampUpSeconds, holdForSeconds), _testCts.Token))
-                };
-                if (throughput > 0)
-                {
-                    tasks.Add(Task.Run(() => _threadControl.ReleaseTokens(startTime, _testCts.Token), _testCts.Token));
-                }
+                var threadCreationTask = Task.Run(() =>_threadAllocator.StartThreads(startTime, concurrency, rampUpSeconds, ct), ct);
 
-                await Task.WhenAll(tasks);
-                await Task.WhenAll(_tasks);
-                _reportWriter.TestsCompleted = true;
-                _reportWriterCts.CancelAfter(TimeSpan.FromSeconds(5));
-                await reportWriterTask;
+                var testDurationTask = throughput > 0
+                    ? Task.Run(() => _threadControl.ReleaseTokens(startTime, ct), ct)
+                    : Task.Run(() => Task.Delay(testDuration, ct), ct);
+
+                await threadCreationTask;
+                await testDurationTask;
             }
-            catch (TaskCanceledException) { }
-            catch (OperationCanceledException) { }
-            catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
+            // catch (TaskCanceledException) { }
+            // catch (OperationCanceledException) { }
+            // catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
             finally
             {
                 _executionSemaphore.Release();
             }
+
+            _reportWriter.TestsCompleted = true;
+            await reportWriterTask;
         }
 
         private TimeSpan TestDuration (int rampUpSeconds, int holdForSeconds) => 
@@ -79,6 +68,7 @@ namespace NUnitDotNetCoreRunner.Services
             int concurrency,
             double throughput,
             int rampUpSeconds,
-            int holdForSeconds);
+            int holdForSeconds,
+            CancellationToken ct);
     }
 }
