@@ -11,7 +11,7 @@ namespace NUnitDotNetCoreRunner.Services
         private readonly TestPackage _package;
         private readonly ConcurrentQueue<ReportItem> _reportItems;
         private readonly TestFilter _filter;
-
+        private readonly ITestRunner _testRunner;
         public NUnitAdapter(
             string targetAssembly, 
             string testName,
@@ -25,8 +25,8 @@ namespace NUnitDotNetCoreRunner.Services
                 ? TestFilter.Empty
                 : new TestFilter($"<filter><name>{testName}</name></filter>");
 
-            var runner = _engine.GetRunner(_package);
-            var testCount = runner.CountTestCases(_filter);
+            _testRunner = _engine.GetRunner(_package);
+            var testCount = _testRunner.CountTestCases(_filter);
             if (testCount == 0)
             {
                 throw new ArgumentException("Nothing to run, no tests were loaded");
@@ -35,8 +35,7 @@ namespace NUnitDotNetCoreRunner.Services
 
         public void RunTest(string threadName)
         {
-            var runner = _engine.GetRunner(_package);
-            runner.Run(new TestEventListener(_reportItems, threadName), _filter);
+            _testRunner.Run(new TestEventListener(_reportItems, threadName), _filter);
         }
     }
 

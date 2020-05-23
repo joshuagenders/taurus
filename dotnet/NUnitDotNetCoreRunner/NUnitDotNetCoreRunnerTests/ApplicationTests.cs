@@ -34,13 +34,8 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<IReportWriter> reportWriter,
             Mock<INUnitAdapter> nUnitAdapter)
         {
-            var cts = new CancellationTokenSource();
-            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
-            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
-            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
-
-            cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
-            await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
+            await RunApp(concurrency, throughput, iterations: 0, rampUpSeconds, holdForSeconds, reportWriter.Object, nUnitAdapter.Object);
+            
             nUnitAdapter.Verify(n =>
                 n.RunTest(It.IsRegex("worker_.+")),
                 Times.Exactly(iterations));
@@ -61,19 +56,13 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<IReportWriter> reportWriter,
             Mock<INUnitAdapter> nUnitAdapter)
         {
-            var cts = new CancellationTokenSource();
-            var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
-            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
-            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
-
             var watch = new Stopwatch();
-            watch.Start(); 
-            cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
-            await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
+            watch.Start();
+            await RunApp(concurrency, throughput, iterations: 0, rampUpSeconds, holdForSeconds, reportWriter.Object, nUnitAdapter.Object);
             watch.Stop();
             watch.Elapsed.Should().BeGreaterOrEqualTo(
                 TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds)
-                        .Subtract(TimeSpan.FromMilliseconds(20)));
+                        .Subtract(TimeSpan.FromMilliseconds(10)));
         }
 
         [Theory]
@@ -89,15 +78,8 @@ namespace NUnitDotNetCoreRunnerTests
             int iterations,
             Mock<IReportWriter> reportWriter)
         {
-            var cts = new CancellationTokenSource();
             var nUnit = new NUnitAdapterFake();
-            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
-            var threadAllocator = new ThreadAllocator(nUnit, threadControl);
-            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
-
-            cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
-            await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
-
+            await RunApp(concurrency, throughput, iterations: 0, rampUpSeconds, holdForSeconds, reportWriter.Object, nUnit);
             nUnit.Calls.Should().BeLessThan(iterations);
         }
 
@@ -119,13 +101,7 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<IReportWriter> reportWriter,
             Mock<INUnitAdapter> nUnitAdapter)
         {
-            var cts = new CancellationTokenSource();
-            var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
-            var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
-            var app = new Application(reportWriter.Object, threadAllocator, threadControl);
-
-            cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
-            await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
+            await RunApp(concurrency, throughput, iterations: 0, rampUpSeconds, holdForSeconds, reportWriter.Object, nUnitAdapter.Object);
 
             var expectedTotal = throughput * holdForSeconds +
                 (rampUpSeconds * throughput / 2);
@@ -134,6 +110,23 @@ namespace NUnitDotNetCoreRunnerTests
             nUnitAdapter.Verify(n =>
                 n.RunTest(It.IsRegex("worker_.+")),
                 Times.Between(Convert.ToInt32(expectedTotal - tps), Convert.ToInt32(expectedTotal), Moq.Range.Inclusive));
+        }
+
+        private async Task RunApp(int concurrency,
+            double throughput,
+            int iterations,
+            int rampUpSeconds,
+            int holdForSeconds,
+            IReportWriter reportWriter,
+            INUnitAdapter nUnitAdapter)
+        {
+            var cts = new CancellationTokenSource();
+            var threadControl = new ThreadControl(throughput, iterations, rampUpSeconds, holdForSeconds);
+            var threadAllocator = new ThreadAllocator(nUnitAdapter, threadControl);
+            var app = new Application(reportWriter, threadAllocator, threadControl);
+
+            cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
+            await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
         }
 
         class NUnitAdapterFake : INUnitAdapter
