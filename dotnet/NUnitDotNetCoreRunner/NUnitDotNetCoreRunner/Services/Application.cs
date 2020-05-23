@@ -30,13 +30,14 @@ namespace NUnitDotNetCoreRunner.Services
             int holdForSeconds,
             CancellationToken ct)
         {
-            await _executionSemaphore.WaitAsync(ct);
+            //await _executionSemaphore.WaitAsync(ct);
             var startTime = DateTime.UtcNow;
             var testDuration = TestDuration(rampUpSeconds, holdForSeconds);
-            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(), ct);
+            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(ct), ct);
 
             try
             {
+                //TODO remove tasks? -> single threaded loop -> should add thread, should release token
                 var threadCreationTask = Task.Run(() =>_threadAllocator.StartThreads(startTime, concurrency, rampUpSeconds, ct), ct);
 
                 var testDurationTask = throughput > 0
@@ -51,7 +52,7 @@ namespace NUnitDotNetCoreRunner.Services
             // catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
             finally
             {
-                _executionSemaphore.Release();
+                //_executionSemaphore.Release();
             }
 
             _reportWriter.TestsCompleted = true;

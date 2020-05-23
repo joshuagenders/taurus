@@ -74,13 +74,14 @@ namespace NUnitDotNetCoreRunner.Services
                     if (!ct.IsCancellationRequested && !testCompleted)
                     {
                         _nUnitAdapter.RunTest(threadName);
+                        await Task.Delay(15);
                     }
                 }
                 finally
                 {
                     _threadControl.ReleaseTaskExecution();
                 }
-            };
+            }
         }
 
         private bool InRampup(DateTime startTime, int concurrency, int rampUpSeconds) =>

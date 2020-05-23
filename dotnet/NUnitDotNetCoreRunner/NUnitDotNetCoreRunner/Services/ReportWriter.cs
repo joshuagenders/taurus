@@ -3,6 +3,7 @@ using NUnitDotNetCoreRunner.Models;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NUnitDotNetCoreRunner.Services
@@ -20,13 +21,13 @@ namespace NUnitDotNetCoreRunner.Services
 
         public bool TestsCompleted { get; set; }
 
-        public async Task StartWriting()
+        public async Task StartWriting(CancellationToken ct)
         {
             using (var streamWriter = new StreamWriter(_reportFile))
             {
                 streamWriter.AutoFlush = true;
 
-                while (!TestsCompleted || _reportItems.Count > 0)
+                while ((!TestsCompleted || _reportItems.Count > 0) && !ct.IsCancellationRequested)
                 {
                     if (_reportItems.TryDequeue(out var item))
                     {
@@ -58,7 +59,7 @@ namespace NUnitDotNetCoreRunner.Services
 
     public interface IReportWriter
     {
-        Task StartWriting();
+        Task StartWriting(CancellationToken ct);
         bool TestsCompleted { get; set; }
     }
 }

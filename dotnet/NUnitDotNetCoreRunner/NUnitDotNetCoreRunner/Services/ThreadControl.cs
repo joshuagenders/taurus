@@ -7,6 +7,7 @@ namespace NUnitDotNetCoreRunner.Services
     public class ThreadControl : IThreadControl
     {
         private readonly SemaphoreSlim _taskExecution;
+        private readonly SemaphoreSlim _taskIncrement;
 
         private bool _enabled { get; set; }
         public double _throughput { get; }
@@ -16,11 +17,10 @@ namespace NUnitDotNetCoreRunner.Services
 
         private int _executionRequestCount;
 
-        private static Mutex _mutex = new Mutex();
-
         public ThreadControl(double throughput, int iterations, int rampUpSeconds, int holdForSeconds)
         {
             _taskExecution = new SemaphoreSlim(0);
+            _taskIncrement = new SemaphoreSlim(1);
             _throughput = throughput;
             _iterations = iterations;
             _rampUpSeconds = rampUpSeconds;
@@ -29,27 +29,38 @@ namespace NUnitDotNetCoreRunner.Services
             _executionRequestCount = 0;
         }
 
-        public int ReleaseTaskExecution(int count = 1) 
-        {
-            return _enabled
+        public int ReleaseTaskExecution(int count = 1) =>
+            _enabled
                 ? _taskExecution.Release(count)
                 : 0;
-        }
 
         public async Task<bool> RequestTaskExecution(DateTime startTime, CancellationToken ct)
         {
-            if (_enabled) await _taskExecution.WaitAsync(ct);
+            if (_enabled)
+            {
+                await _taskExecution.WaitAsync(ct);
+            }
             int iterations;
             try
             {
-                _mutex.WaitOne();
+                await _taskIncrement.WaitAsync(ct);
                 iterations = Interlocked.Increment(ref _executionRequestCount);
             }
             finally
             {
-                _mutex.ReleaseMutex();
+                if (_taskIncrement.CurrentCount <= 0)
+                {
+                    _taskIncrement.Release();
+                }
             }
-            return IsTestComplete(startTime, iterations);
+
+            var e = EndTime(startTime, _rampUpSeconds, _holdForSeconds);
+            var t = IsTestComplete(e, iterations);
+            if (iterations > 5)
+            {
+                Console.WriteLine();
+            }
+            return t;
         }
 
         private int TotalAllowedRequestsToNow(int millisecondsEllapsed)
@@ -59,22 +70,34 @@ namespace NUnitDotNetCoreRunner.Services
             }
             double totalRpsToNow;
             var secondsEllapsed = Convert.ToInt32(millisecondsEllapsed / 1000);
-            if (_rampUpSeconds > 0 && secondsEllapsed > _rampUpSeconds)
+            if (_rampUpSeconds > 0)
             {
-                totalRpsToNow = (_throughput * _rampUpSeconds / 2)
-                    + (secondsEllapsed - _rampUpSeconds) * _throughput;
+                if (secondsEllapsed > _rampUpSeconds)
+                {
+                    totalRpsToNow = (_throughput * _rampUpSeconds / 2)
+                        + (secondsEllapsed - _rampUpSeconds) * _throughput;
+                }
+                else
+                {
+                    totalRpsToNow = (_throughput * millisecondsEllapsed) / 1000 / 2;
+                }
             }
             else
             {
-                totalRpsToNow = (_throughput * millisecondsEllapsed) / 1000 / 2;
+                totalRpsToNow = (_throughput * millisecondsEllapsed) / 1000;
             }
             return Convert.ToInt32(totalRpsToNow);
         }
 
         public async Task ReleaseTokens(DateTime startTime, CancellationToken ct)
         {
+            if (!_enabled)
+            {
+                return;
+            }
             var tokensReleased = 0;
-            while (!DurationComplete(startTime) && !ct.IsCancellationRequested)
+            var endTime = EndTime(startTime, _rampUpSeconds, _holdForSeconds);
+            while (!IsTestComplete(endTime, tokensReleased) && !ct.IsCancellationRequested)
             {
                 var millisecondsEllapsed = Convert.ToInt32(DateTime.UtcNow.Subtract(startTime).TotalMilliseconds);
                 var tokensToNow = TotalAllowedRequestsToNow(millisecondsEllapsed);
@@ -95,20 +118,18 @@ namespace NUnitDotNetCoreRunner.Services
                     }
                     if (tokensToRelease > 0)
                     {
+                        System.Diagnostics.Debug.WriteLine($"tokensReleased {tokensToRelease}");
                         tokensReleased += tokensToRelease;
                         _taskExecution.Release(tokensToRelease);
                     }
                 }
-
+                System.Diagnostics.Debug.WriteLine($"totaltokensReleased {tokensReleased}");
                 await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
             }
         }
 
-        private bool IsTestComplete(DateTime startTime, int iterations) => 
-            DurationComplete(startTime) || IterationsExceeded(iterations);
-
-        private bool DurationComplete(DateTime startTime) => 
-            DateTime.UtcNow >= EndTime(startTime, _rampUpSeconds, _holdForSeconds);
+        private bool IsTestComplete(DateTime endTime, int iterations) => 
+            DateTime.UtcNow >= endTime || IterationsExceeded(iterations);
 
         private bool IterationsExceeded(int iterations) =>
             _iterations > 0 && iterations > _iterations;

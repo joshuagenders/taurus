@@ -72,7 +72,9 @@ namespace NUnitDotNetCoreRunnerTests
             cts.CancelAfter(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds + 1));
             await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
             watch.Stop();
-            watch.Elapsed.Should().BeGreaterOrEqualTo(TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds));
+            watch.Elapsed.Should().BeGreaterOrEqualTo(
+                TimeSpan.FromSeconds(holdForSeconds + rampUpSeconds)
+                        .Subtract(TimeSpan.FromMilliseconds(20)));
         }
 
         [Theory]
@@ -111,7 +113,6 @@ namespace NUnitDotNetCoreRunnerTests
         //[InlineAutoMoqData(1, 0.8, 2, 4)]
         //[InlineAutoMoqData(2, 2, 2, 4)]
         //[InlineAutoMoqData(2, 20, 2, 4)]
-        //[InlineAutoMoqData(1, 1, 30, 120)]
         public async Task WhenThroughputIsSpecified_ThenRPSIsNotExceeded(
             int concurrency,
             double throughput,
@@ -121,6 +122,7 @@ namespace NUnitDotNetCoreRunnerTests
             Mock<INUnitAdapter> nUnitAdapter)
         {
             var cts = new CancellationTokenSource();
+            var nUnit = new NUnitAdapterFake();
             var threadControl = new ThreadControl(throughput, iterations: 0, rampUpSeconds, holdForSeconds);
             var threadAllocator = new ThreadAllocator(nUnitAdapter.Object, threadControl);
             var app = new Application(reportWriter.Object, threadAllocator, threadControl);
@@ -129,13 +131,11 @@ namespace NUnitDotNetCoreRunnerTests
             await app.Run(concurrency, throughput, rampUpSeconds, holdForSeconds, cts.Token);
 
             var expectedTotal = throughput * concurrency * holdForSeconds +
-                Enumerable.Range(0, rampUpSeconds)
-                    .Select(s => s * concurrency * throughput)
-                    .Sum();
+                (rampUpSeconds * throughput * concurrency / 2);
 
-            nUnitAdapter.Verify(n =>
-                n.RunTest(It.IsAny<string>()),
-                Times.Between(Convert.ToInt32(expectedTotal - 1), Convert.ToInt32(expectedTotal + 1), Moq.Range.Inclusive));
+            nUnit.Calls.Should().BeInRange(
+                Convert.ToInt32(expectedTotal - concurrency), 
+                Convert.ToInt32(expectedTotal + concurrency));
         }
 
         class NUnitAdapterFake : INUnitAdapter
@@ -145,7 +145,7 @@ namespace NUnitDotNetCoreRunnerTests
             public void RunTest(string threadName)
             {
                 Interlocked.Increment(ref Calls);
-                Thread.Sleep(600);
+                Thread.Sleep(400);
             }
         }
         /*
