@@ -30,33 +30,29 @@ namespace NUnitDotNetCoreRunner.Services
             int holdForSeconds,
             CancellationToken ct)
         {
-            //await _executionSemaphore.WaitAsync(ct);
-            var startTime = DateTime.UtcNow;
-            var testDuration = TestDuration(rampUpSeconds, holdForSeconds);
-            var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(ct), ct);
-
+            await _executionSemaphore.WaitAsync(ct);
             try
             {
-                //TODO remove tasks? -> single threaded loop -> should add thread, should release token
+                var startTime = DateTime.UtcNow;
+                var testDuration = TestDuration(rampUpSeconds, holdForSeconds);
+                var reportWriterTask = Task.Run(() => _reportWriter.StartWriting(ct), ct);
                 var threadCreationTask = Task.Run(() =>_threadAllocator.StartThreads(startTime, concurrency, rampUpSeconds, ct), ct);
-
                 var testDurationTask = throughput > 0
                     ? Task.Run(() => _threadControl.ReleaseTokens(startTime, ct), ct)
                     : Task.Run(() => Task.Delay(testDuration, ct), ct);
 
                 await threadCreationTask;
                 await testDurationTask;
+                _reportWriter.TestsCompleted = true;
+                await reportWriterTask;
             }
-            // catch (TaskCanceledException) { }
-            // catch (OperationCanceledException) { }
-            // catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
+            catch (TaskCanceledException) { }
+            catch (OperationCanceledException) { }
+            catch (AggregateException e) when (e.InnerExceptions.All(x => x is TaskCanceledException || x is OperationCanceledException)) { }
             finally
             {
-                //_executionSemaphore.Release();
+                _executionSemaphore.Release();
             }
-
-            _reportWriter.TestsCompleted = true;
-            await reportWriterTask;
         }
 
         private TimeSpan TestDuration (int rampUpSeconds, int holdForSeconds) => 

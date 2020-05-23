@@ -29,16 +29,14 @@ namespace NUnitDotNetCoreRunner.Services
             _executionRequestCount = 0;
         }
 
-        public int ReleaseTaskExecution(int count = 1) =>
-            _enabled
-                ? _taskExecution.Release(count)
-                : 0;
-
         public async Task<bool> RequestTaskExecution(DateTime startTime, CancellationToken ct)
         {
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - task execution request start");
             if (_enabled)
             {
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - task execution enabled, waiting");
                 await _taskExecution.WaitAsync(ct);
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - waiting complete");
             }
             int iterations;
             try
@@ -53,14 +51,10 @@ namespace NUnitDotNetCoreRunner.Services
                     _taskIncrement.Release();
                 }
             }
-
-            var e = EndTime(startTime, _rampUpSeconds, _holdForSeconds);
-            var t = IsTestComplete(e, iterations);
-            if (iterations > 5)
-            {
-                Console.WriteLine();
-            }
-            return t;
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - iterations {iterations}");
+            var isCompleted = IsTestComplete(EndTime(startTime, _rampUpSeconds, _holdForSeconds), iterations);
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - is test completed {isCompleted}");
+            return isCompleted;
         }
 
         private int TotalAllowedRequestsToNow(int millisecondsEllapsed)
@@ -70,6 +64,7 @@ namespace NUnitDotNetCoreRunner.Services
             }
             double totalRpsToNow;
             var secondsEllapsed = Convert.ToInt32(millisecondsEllapsed / 1000);
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - calculating tokens, seconds ellapsed {secondsEllapsed}");
             if (_rampUpSeconds > 0)
             {
                 if (secondsEllapsed > _rampUpSeconds)
@@ -86,6 +81,7 @@ namespace NUnitDotNetCoreRunner.Services
             {
                 totalRpsToNow = (_throughput * millisecondsEllapsed) / 1000;
             }
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - total allowed requests to now {totalRpsToNow}");
             return Convert.ToInt32(totalRpsToNow);
         }
 
@@ -118,13 +114,13 @@ namespace NUnitDotNetCoreRunner.Services
                     }
                     if (tokensToRelease > 0)
                     {
-                        System.Diagnostics.Debug.WriteLine($"tokensReleased {tokensToRelease}");
+                        System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - releasing {tokensToRelease}");
                         tokensReleased += tokensToRelease;
+                        System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - total tokens released {tokensReleased}");
                         _taskExecution.Release(tokensToRelease);
                     }
                 }
-                System.Diagnostics.Debug.WriteLine($"totaltokensReleased {tokensReleased}");
-                await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+                await Task.Delay(TimeSpan.FromMilliseconds(100), ct); //todo configure
             }
         }
 
@@ -141,7 +137,6 @@ namespace NUnitDotNetCoreRunner.Services
     public interface IThreadControl
     {
         Task<bool> RequestTaskExecution(DateTime startTime, CancellationToken ct);
-        int ReleaseTaskExecution(int count = 1);
         Task ReleaseTokens(DateTime startTime, CancellationToken ct);
     }
 }

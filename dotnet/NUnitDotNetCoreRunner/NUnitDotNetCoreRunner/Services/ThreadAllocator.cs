@@ -22,6 +22,7 @@ namespace NUnitDotNetCoreRunner.Services
         {
             //maybe todo - request desired thread state from thread control and adjust to match
             var threadsRemaining = concurrency;
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - start threads");
             while (InRampup(startTime, concurrency, rampUpSeconds) && !ct.IsCancellationRequested)
             {
                 var sleepInterval = TimeSpan.FromSeconds(rampUpSeconds / concurrency);
@@ -41,8 +42,10 @@ namespace NUnitDotNetCoreRunner.Services
                 {
                     break;
                 }
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - start threads sleeping {sleepInterval}");
                 await Task.Delay(sleepInterval, ct);
             }
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - start threads rampup complete");
             for (var i = 0; i < threadsRemaining; i++)
             {
                 if (!StartTask(startTime, concurrency, ct))
@@ -50,12 +53,14 @@ namespace NUnitDotNetCoreRunner.Services
                     break;
                 }
             }
+            System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - start threads complete");
         }
 
         private bool StartTask(DateTime startTime, int concurrency, CancellationToken ct)
         {
             if (_tasks.Count < concurrency)
             {
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - start task");
                 _tasks.Add(Task.Run(() => TestLoop(startTime, ct), ct));
                 return true;
             }
@@ -68,18 +73,14 @@ namespace NUnitDotNetCoreRunner.Services
             bool testCompleted = false;
             while (!ct.IsCancellationRequested && !testCompleted)
             {
-                try
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - request task execution");
+                testCompleted = await _threadControl.RequestTaskExecution(startTime, ct);
+                System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - task execution request returned");
+                if (!ct.IsCancellationRequested && !testCompleted)
                 {
-                    testCompleted = await _threadControl.RequestTaskExecution(startTime, ct);
-                    if (!ct.IsCancellationRequested && !testCompleted)
-                    {
-                        _nUnitAdapter.RunTest(threadName);
-                        await Task.Delay(15);
-                    }
-                }
-                finally
-                {
-                    _threadControl.ReleaseTaskExecution();
+                    System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - test not complete - run nunit");
+                    _nUnitAdapter.RunTest(threadName);
+                    System.Diagnostics.Debug.WriteLine($"{DateTime.UtcNow.ToString("H:mm:ss.fff")} - nunit run complete");
                 }
             }
         }
