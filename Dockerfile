@@ -5,6 +5,7 @@ ENV DBUS_SESSION_BUS_ADDRESS=/dev/null DEBIAN_FRONTEND=noninteractive APT_INSTAL
 WORKDIR /tmp
 ADD https://dl-ssl.google.com/linux/linux_signing_key.pub /tmp
 ADD https://deb.nodesource.com/setup_10.x /tmp
+ADD https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb /tmp
 RUN apt-get -y update \
   && apt-get -y install dirmngr \
   && $APT_INSTALL software-properties-common apt-utils \
@@ -17,6 +18,7 @@ RUN apt-get -y update \
   && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
   && bash /tmp/setup_10.x \
   && $APT_INSTALL tzdata \
+  && dpkg -i /tmp/packages-microsoft-prod.deb \
   && dpkg-reconfigure --frontend noninteractive tzdata \
   && $APT_INSTALL \
     language-pack-en mc kmod unzip build-essential \
@@ -24,6 +26,7 @@ RUN apt-get -y update \
     udev openjdk-8-jdk xvfb siege tsung apache2-utils phantom phantom-ssl \
     firefox google-chrome-stable pepperflashplugin-nonfree flashplugin-installer \
     ruby ruby-dev nodejs mono-complete nuget net-tools gcc-mingw-w64-x86-64 \
+    apt-transport-https dotnet-sdk-3.1 \
   && $APT_INSTALL python3-dev python3-pip \
   && python3 -m pip install --upgrade pip \
   && python3 -m pip install --user --upgrade setuptools wheel \

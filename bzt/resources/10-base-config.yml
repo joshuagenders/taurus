@@ -36,6 +36,8 @@ modules:
     class: bzt.modules.javascript.MochaTester
   nunit:
     class: bzt.modules.csharp.NUnitExecutor
+  nunit-dotnetcore:
+    class: bzt.modules.dotnet.NUnitDotNetCoreExecutor
   pytest:
     class: bzt.modules.pytest.PyTestExecutor
   wdio:
